@@ -152,9 +152,9 @@ export function Bin({
         )}
         {binTab === "captions" && (
           <>
-            <p className="hint">Caption pass splits a transcript onto the voice clip. Styles burn into the frame.</p>
+            <p className="hint">Auto caption splits a transcript onto the voice clip. Styles burn into the frame.</p>
             <button className="ghost" onClick={onCaptionPass}>
-              Caption pass
+              Auto caption
             </button>
             <button className="ghost" onClick={() => addCaption()}>
               Add line

@@ -47,7 +47,7 @@ export function CaptionPass({ onClose }: { onClose: () => void }) {
   return (
     <div className="modal sheet-modal" onClick={onClose}>
       <div className="card sheet-card" onClick={(e) => e.stopPropagation()}>
-        <h2>Caption pass</h2>
+        <h2>Auto caption</h2>
         <p className="hint">Paste a transcript and distribute on the voice clip. Or import SRT. Speech stays in this tab.</p>
         <textarea
           className="pass-ta"
@@ -69,7 +69,7 @@ export function CaptionPass({ onClose }: { onClose: () => void }) {
             Import SRT
           </button>
           <button className="ghost" onClick={fromVoice} disabled={busy}>
-            {busy ? "Working…" : "From voice clip"}
+            {busy ? "Working…" : "Auto caption"}
           </button>
         </div>
         <div className="row" style={{ marginTop: 12 }}>
