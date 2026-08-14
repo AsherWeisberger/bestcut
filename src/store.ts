@@ -138,6 +138,28 @@ function schedulePersist(p: Project) {
   persistTimer = window.setTimeout(() => persistProject(p), 400);
 }
 
+type HeadFn = (t: number) => void;
+const headFns = new Set<HeadFn>();
+export function watchPlayhead(fn: HeadFn) {
+  headFns.add(fn);
+  fn(useEditor.getState().playhead);
+  return () => {
+    headFns.delete(fn);
+  };
+}
+export function emitPlayhead(t: number) {
+  for (const fn of headFns) {
+    try {
+      fn(t);
+    } catch {
+      /* listener must not break playback */
+    }
+  }
+}
+
+let coalesceUntil = 0;
+let coalesceId = "";
+
 export const useEditor = create<Editor>((set, get) => ({
   project: emptyProject(),
   assets: {},
@@ -187,7 +209,9 @@ export const useEditor = create<Editor>((set, get) => ({
   },
   setPlayhead(t) {
     const d = projectDuration(get().project);
-    set({ playhead: Math.max(0, Math.min(t, d + 0.05)) });
+    const next = Math.max(0, Math.min(t, d + 0.05));
+    if (Math.abs(next - get().playhead) > 1e-4) set({ playhead: next });
+    emitPlayhead(next);
   },
   setPlaying(v) {
     set({ playing: v });
@@ -237,6 +261,7 @@ export const useEditor = create<Editor>((set, get) => ({
   },
 
   async importFiles(files) {
+    if (!files.length) return;
     get().push();
     const project = clone(get().project);
     const assets = { ...get().assets };
@@ -308,7 +333,7 @@ export const useEditor = create<Editor>((set, get) => ({
           tVideo += meta.duration || 2;
         }
       } catch (e) {
-        set({ toast: "Could not read that file in this browser." });
+        get().setToast("Could not read that file in this browser.");
         console.error(e);
       }
     }
@@ -456,7 +481,10 @@ export const useEditor = create<Editor>((set, get) => ({
     schedulePersist(project);
   },
   updateClip(id, patch) {
-    get().push();
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (id !== coalesceId || now > coalesceUntil) get().push();
+    coalesceId = id;
+    coalesceUntil = now + 450;
     const project = {
       ...get().project,
       clips: get().project.clips.map((c) => (c.id === id ? { ...c, ...patch } : c)),

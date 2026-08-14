@@ -31,21 +31,33 @@ export type CodecSupport = {
 };
 
 export async function probeCodecs(): Promise<CodecSupport> {
-  const avc = await canEncodeVideo("avc");
-  const vp9 = await canEncodeVideo("vp9").catch(() => false);
-  const vp8 = await canEncodeVideo("vp8").catch(() => false);
-  const aac = await canEncodeAudio("aac").catch(() => false);
-  const opus = await canEncodeAudio("opus").catch(() => false);
-  const mediaRecorderWebm =
-    typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus");
+  const safe = async (p: Promise<boolean>) => {
+    try {
+      return !!(await p);
+    } catch {
+      return false;
+    }
+  };
+  const avc = await safe(canEncodeVideo("avc"));
+  const vp9 = await safe(canEncodeVideo("vp9"));
+  const vp8 = await safe(canEncodeVideo("vp8"));
+  const aac = await safe(canEncodeAudio("aac"));
+  const opus = await safe(canEncodeAudio("opus"));
+  let mediaRecorderWebm = false;
+  try {
+    mediaRecorderWebm =
+      typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus");
+  } catch {
+    mediaRecorderWebm = false;
+  }
   return {
-    avc: !!avc,
-    vp9: !!vp9,
-    vp8: !!vp8,
-    aac: !!aac,
-    opus: !!opus,
-    mp4: !!avc && !!aac,
-    webm: !!(vp9 || vp8) && !!opus,
+    avc,
+    vp9,
+    vp8,
+    aac,
+    opus,
+    mp4: avc && aac,
+    webm: (vp9 || vp8) && opus,
     mediaRecorderWebm,
   };
 }
@@ -105,8 +117,7 @@ async function exportWebCodecs(
 
   const videoSource = new CanvasSource(canvas, {
     codec: vCodec,
-    bitrate: 6_000_000,
-    quality: new Quality("high"),
+    quality: new Quality({ bitrate: 6_000_000 }),
   });
 
   const mixed = mixProjectAudio(project, duration);
@@ -114,7 +125,6 @@ async function exportWebCodecs(
   if (aCodec && mixed.duration > 0) {
     audioSource = new AudioBufferSource({
       codec: aCodec,
-      bitrate: 160_000,
       quality: new Quality({ bitrate: 160_000 }),
     });
   }

@@ -45,7 +45,8 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
       });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `${project.name.replace(/\s+/g, "-") || "bestcut"}.${format === "mp4" ? "mp4" : "webm"}`;
+      const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+      a.download = `${project.name.replace(/\s+/g, "-") || "bestcut"}.${ext}`;
       a.click();
       setLabel("Saved — play it on device.");
       setProgress(1);

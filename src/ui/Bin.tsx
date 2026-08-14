@@ -115,6 +115,7 @@ export function Bin({
   const assets = useEditor((s) => s.assets);
   const binTab = useEditor((s) => s.binTab);
   const setBinTab = useEditor((s) => s.setBinTab);
+  const importFiles = useEditor((s) => s.importFiles);
   const addText = useEditor((s) => s.addText);
   const addCaption = useEditor((s) => s.addCaption);
   const setTransition = useEditor((s) => s.setTransition);
@@ -134,7 +135,17 @@ export function Bin({
       <div className="bin-list">
         {binTab === "media" && (
           <>
-            <button className="import-tile" onClick={onImport}>
+            <button
+              className="import-tile"
+              onClick={onImport}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const files = e.dataTransfer.files;
+                if (files?.length) importFiles([...files]);
+              }}
+            >
               Drop files or import
             </button>
             {list.map((a) => (

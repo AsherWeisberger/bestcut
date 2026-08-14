@@ -57,7 +57,6 @@ export function Inspector({
 }) {
   const project = useEditor((s) => s.project);
   const selectedId = useEditor((s) => s.selectedId);
-  const playhead = useEditor((s) => s.playhead);
   const speedMarkIn = useEditor((s) => s.speedMarkIn);
   const speedMarkOut = useEditor((s) => s.speedMarkOut);
   const updateClip = useEditor((s) => s.updateClip);
@@ -102,7 +101,7 @@ export function Inspector({
               <button className="ghost" onClick={() => addText("rise")}>
                 Title
               </button>
-              <button className="ghost" onClick={() => onCaptionPass?.() || addCaption()}>
+              <button className="ghost" onClick={() => (onCaptionPass ? onCaptionPass() : addCaption())}>
                 Caption pass
               </button>
             </div>
@@ -388,7 +387,7 @@ export function Inspector({
                           {speedMarkOut != null ? fmtTime(speedMarkOut) : "Out —"}
                           {speedMarkIn != null && speedMarkOut != null
                             ? ` · then tap a speed`
-                            : ` · playhead ${fmtTime(playhead)}`}
+                            : " · park playhead, tap In then Out"}
                         </p>
                       )}
                     </div>

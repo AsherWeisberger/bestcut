@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { ASPECT_SIZE, clipEnd, clipSpeed, fmtTime, projectDuration } from "../types";
-import { useEditor } from "../store";
+import { ASPECT_SIZE, clipEnd, clipSpeed, fmtTime, projectDuration, type Project } from "../types";
+import { useEditor, watchPlayhead } from "../store";
 import { media, sourceTime } from "../engine/media";
 import { PreviewAudio } from "../engine/audio";
 import { renderFrame, visibleMediaClips, type FrameBank } from "../engine/render";
@@ -8,10 +8,58 @@ import { IconPause, IconPlay, IconSplit, IconUndo } from "./icons";
 
 const audio = new PreviewAudio();
 
+function paintCanvas(canvas: HTMLCanvasElement | null, t: number, project: Project) {
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const size = ASPECT_SIZE[project.aspect];
+  if (canvas.width !== size.w) canvas.width = size.w;
+  if (canvas.height !== size.h) canvas.height = size.h;
+  const bank: FrameBank = { frames: new Map() };
+  const playing = useEditor.getState().playing;
+  for (const c of visibleMediaClips(project, t)) {
+    if (!c.assetId) continue;
+    if (c.type === "image") {
+      const img = media.images.get(c.assetId);
+      if (img) bank.frames.set(c.id, img);
+    } else {
+      const v = media.videos.get(c.assetId);
+      if (v) {
+        if (!playing) {
+          const st = sourceTime(c, t);
+          if (Math.abs(v.currentTime - st) > 0.04) {
+            try {
+              v.currentTime = Math.max(0, Math.min(st, (v.duration || st) - 0.001));
+            } catch {
+              /* */
+            }
+          }
+        }
+        bank.frames.set(c.id, v);
+      }
+    }
+  }
+  renderFrame(ctx, t, project, bank);
+}
+
+function Timecode({ duration }: { duration: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    return watchPlayhead((t) => {
+      const el = ref.current;
+      if (el) el.textContent = `${fmtTime(t)} / ${fmtTime(duration)}`;
+    });
+  }, [duration]);
+  return (
+    <div className="tc" ref={ref}>
+      {fmtTime(0)} / {fmtTime(duration)}
+    </div>
+  );
+}
+
 export function Preview({ onExport }: { onExport?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const project = useEditor((s) => s.project);
-  const playhead = useEditor((s) => s.playhead);
   const playing = useEditor((s) => s.playing);
   const selectedId = useEditor((s) => s.selectedId);
   const setPlayhead = useEditor((s) => s.setPlayhead);
@@ -24,43 +72,18 @@ export function Preview({ onExport }: { onExport?: () => void }) {
   const safeOn = selected?.type === "text" || selected?.type === "caption";
   const vertical = size.h >= size.w;
 
-  const paint = (t: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    if (canvas.width !== size.w) canvas.width = size.w;
-    if (canvas.height !== size.h) canvas.height = size.h;
-    const bank: FrameBank = { frames: new Map() };
-    for (const c of visibleMediaClips(project, t)) {
-      if (!c.assetId) continue;
-      if (c.type === "image") {
-        const img = media.images.get(c.assetId);
-        if (img) bank.frames.set(c.id, img);
-      } else {
-        const v = media.videos.get(c.assetId);
-        if (v) {
-          if (!useEditor.getState().playing) {
-            const st = sourceTime(c, t);
-            if (Math.abs(v.currentTime - st) > 0.04) {
-              try {
-                v.currentTime = Math.max(0, Math.min(st, (v.duration || st) - 0.001));
-              } catch {
-                /* */
-              }
-            }
-          }
-          bank.frames.set(c.id, v);
-        }
-      }
-    }
-    renderFrame(ctx, t, project, bank);
-  };
+  useEffect(() => {
+    if (useEditor.getState().playing) return;
+    paintCanvas(canvasRef.current, useEditor.getState().playhead, project);
+  }, [project, size.w, size.h]);
 
   useEffect(() => {
-    paint(playhead);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playhead, project, size.w, size.h]);
+    if (playing) return;
+    return watchPlayhead((t) => {
+      if (useEditor.getState().playing) return;
+      paintCanvas(canvasRef.current, t, useEditor.getState().project);
+    });
+  }, [playing]);
 
   useEffect(() => {
     if (!playing) {
@@ -71,10 +94,11 @@ export function Preview({ onExport }: { onExport?: () => void }) {
     let raf = 0;
     let last = performance.now();
     let t = useEditor.getState().playhead;
-    audio.play(project, t, dur).catch(() => {});
-    const syncVideos = (at: number) => {
-      const covering = new Map<string, (typeof project.clips)[number]>();
-      for (const c of project.clips) {
+    const startProject = useEditor.getState().project;
+    audio.play(startProject, t, projectDuration(startProject)).catch(() => {});
+    const syncVideos = (proj: Project, at: number) => {
+      const covering = new Map<string, Project["clips"][number]>();
+      for (const c of proj.clips) {
         if (c.type !== "video" || !c.assetId) continue;
         if (at >= c.start - 1e-4 && at < clipEnd(c) - 1e-6) covering.set(c.assetId, c);
       }
@@ -103,25 +127,31 @@ export function Preview({ onExport }: { onExport?: () => void }) {
         if (v.paused) v.play().catch(() => {});
       }
     };
-    syncVideos(t);
+    syncVideos(startProject, t);
     const loop = (now: number) => {
       const dt = Math.min(0.08, (now - last) / 1000);
       last = now;
       t += dt;
-      if (t >= dur) {
-        t = dur;
-        useEditor.getState().setPlaying(false);
-        useEditor.getState().setPlayhead(t);
-        paint(t);
+      const ed = useEditor.getState();
+      const proj = ed.project;
+      const end = projectDuration(proj);
+      if (t >= end) {
+        t = end;
+        ed.setPlayhead(t);
+        ed.setPlaying(false);
+        paintCanvas(canvasRef.current, t, proj);
         return;
       }
-      syncVideos(t);
-      useEditor.getState().setPlayhead(t);
-      paint(t);
+      syncVideos(proj, t);
+      ed.setPlayhead(t);
+      paintCanvas(canvasRef.current, t, proj);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      useEditor.getState().setPlayhead(t);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
@@ -134,7 +164,7 @@ export function Preview({ onExport }: { onExport?: () => void }) {
         e.preventDefault();
         setPlaying(!ed.playing);
       }
-      if (e.key === "s" || e.key === "S" || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b")) {
+      if (e.key === "s" || e.key === "S") {
         e.preventDefault();
         splitAtPlayhead();
       }
@@ -151,7 +181,7 @@ export function Preview({ onExport }: { onExport?: () => void }) {
         e.preventDefault();
         ed.duplicateSelected();
       }
-      if (e.key === "Delete" || e.key === "Backspace") {
+      if (e.key === "Delete" || e.key === "Backspace" || e.key === "Del" || e.code === "Delete") {
         e.preventDefault();
         ed.deleteSelected(e.shiftKey);
       }
@@ -178,15 +208,24 @@ export function Preview({ onExport }: { onExport?: () => void }) {
 
   return (
     <div className="preview-wrap">
-      <div className="preview-stage"><div className="stage-frame" style={vertical ? { aspectRatio: `${size.w} / ${size.h}`, height: "100%", width: "auto", maxWidth: "100%" } : { aspectRatio: `${size.w} / ${size.h}`, width: "100%", height: "auto", maxHeight: "100%" }}>
-        <canvas ref={canvasRef} width={size.w} height={size.h} />
-        {safeOn && (
-          <div className="safe-zone" aria-hidden>
-            <i className="safe-top" />
-            <i className="safe-bot" />
-          </div>
-        )}
-      </div></div>
+      <div className="preview-stage">
+        <div
+          className="stage-frame"
+          style={
+            vertical
+              ? { aspectRatio: `${size.w} / ${size.h}`, height: "100%", width: "auto", maxWidth: "100%" }
+              : { aspectRatio: `${size.w} / ${size.h}`, width: "100%", height: "auto", maxHeight: "100%" }
+          }
+        >
+          <canvas ref={canvasRef} width={size.w} height={size.h} />
+          {safeOn && (
+            <div className="safe-zone" aria-hidden>
+              <i className="safe-top" />
+              <i className="safe-bot" />
+            </div>
+          )}
+        </div>
+      </div>
       <div className="transport">
         <button className="icon-btn" onClick={undo} title="Undo">
           <IconUndo />
@@ -197,9 +236,7 @@ export function Preview({ onExport }: { onExport?: () => void }) {
         <button className="icon-btn" onClick={splitAtPlayhead} title="Split">
           <IconSplit />
         </button>
-        <div className="tc">
-          {fmtTime(playhead)} / {fmtTime(dur)}
-        </div>
+        <Timecode duration={dur} />
       </div>
     </div>
   );

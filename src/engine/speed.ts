@@ -3,7 +3,10 @@ import { clipEnd, clipSpeed, uid, type Clip, type TransitionKind } from "../type
 const MIN = 0.08;
 
 export function sourceAt(clip: Clip, t: number): number {
-  return clip.trimIn + (t - clip.start) * clipSpeed(clip);
+  const span = sourceSpan(clip);
+  const st = clip.trimIn + (t - clip.start) * clipSpeed(clip);
+  if (span <= 0) return Math.max(0, clip.trimIn);
+  return Math.max(clip.trimIn, Math.min(st, clip.trimIn + span - 1e-4));
 }
 
 export function sourceSpan(clip: Clip): number {

@@ -1,7 +1,22 @@
 import { useEffect, useRef } from "react";
 import { clipEnd, clipSpeed, fmtSpeed, projectDuration, type Clip } from "../types";
-import { useEditor } from "../store";
-import { ensureThumb, media, peaksFor } from "../engine/media";
+import { useEditor, watchPlayhead } from "../store";
+import { ensureThumb, peaksFor } from "../engine/media";
+
+function PlayheadNeedle({ labW, zoom }: { labW: number; zoom: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    return watchPlayhead((t) => {
+      const el = ref.current;
+      if (el) el.style.left = `${labW + t * zoom}px`;
+    });
+  }, [labW, zoom]);
+  return (
+    <div className="playhead" ref={ref} style={{ left: labW }}>
+      <b />
+    </div>
+  );
+}
 
 function kindClass(c: Clip) {
   if (c.type === "audio") return "audio";
@@ -63,7 +78,6 @@ function Film({ clip, width, height, zoom }: { clip: Clip; width: number; height
 export function Timeline() {
   const project = useEditor((s) => s.project);
   const assets = useEditor((s) => s.assets);
-  const playhead = useEditor((s) => s.playhead);
   const playing = useEditor((s) => s.playing);
   const selectedId = useEditor((s) => s.selectedId);
   const zoom = useEditor((s) => s.zoom);
@@ -173,17 +187,17 @@ export function Timeline() {
 
   useEffect(() => {
     if (!playing) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    const x = labW + playhead * zoom;
-    const view = el.clientWidth;
-    const left = el.scrollLeft;
-    const mid0 = left + view * 0.2;
-    const mid1 = left + view * 0.8;
-    if (x < mid0 || x > mid1) {
-      el.scrollLeft = x - view * 0.5;
-    }
-  }, [playhead, playing, zoom]);
+    return watchPlayhead((t) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const x = labW + t * zoom;
+      const view = el.clientWidth;
+      const left = el.scrollLeft;
+      const mid0 = left + view * 0.2;
+      const mid1 = left + view * 0.8;
+      if (x < mid0 || x > mid1) el.scrollLeft = x - view * 0.5;
+    });
+  }, [playing, zoom, labW]);
 
   const onTouch = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
@@ -346,9 +360,7 @@ export function Timeline() {
             </div>
           </div>
         ))}
-        <div className="playhead" style={{ left: labW + playhead * zoom }}>
-          <b />
-        </div>
+        <PlayheadNeedle labW={labW} zoom={zoom} />
         {snapGuide != null && (
           <div className="snap-line" style={{ left: labW + snapGuide * zoom }} />
         )}

@@ -1,4 +1,4 @@
-import { blankClip, clipEnd, uid, type Clip } from "../types";
+import { blankClip, clipEnd, clipSpeed, uid, type Clip } from "../types";
 import { useEditor } from "../store";
 import { media } from "./media";
 
@@ -137,6 +137,15 @@ export async function transcribeWebSpeech(duration: number, onProgress: Progress
 }
 
 export async function autoCaption(opts: { clipId?: string | null; onProgress: ProgressFn }): Promise<{ engine: "whisper" | "webspeech"; count: number }> {
+  try {
+    return await autoCaptionInner(opts);
+  } catch (err) {
+    console.warn("autoCaption", err);
+    throw err instanceof Error ? err : new Error("Could not transcribe in this tab.");
+  }
+}
+
+async function autoCaptionInner(opts: { clipId?: string | null; onProgress: ProgressFn }): Promise<{ engine: "whisper" | "webspeech"; count: number }> {
   const ed = useEditor.getState();
   const targets = ed.project.clips.filter((c) => {
     if (c.type !== "video" && c.type !== "audio") return false;
@@ -153,7 +162,7 @@ export async function autoCaption(opts: { clipId?: string | null; onProgress: Pr
     if (buf && buf.duration > 0.05) {
       try {
         opts.onProgress("Preparing audio…", 0.02);
-        const pcm = resampleMono16k(buf, clip.trimIn, clip.duration);
+        const pcm = resampleMono16k(buf, clip.trimIn, Math.max(0.05, clip.duration * clipSpeed(clip)));
         const transcriber = await loadWhisper(opts.onProgress);
         opts.onProgress("Transcribing…", 0.6);
         const result = await transcriber(pcm, { return_timestamps: true, chunk_length_s: 30 });

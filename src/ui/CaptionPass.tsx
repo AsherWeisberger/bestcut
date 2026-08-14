@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useEditor } from "../store";
 import { splitSentences, srtToClips } from "../engine/captions";
 import { clipEnd } from "../types";
-import { autoCaption, supportsWebSpeech } from "../engine/asr";
+import { autoCaption } from "../engine/asr";
 
 export function CaptionPass({ onClose }: { onClose: () => void }) {
   const project = useEditor((s) => s.project);

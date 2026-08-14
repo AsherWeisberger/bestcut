@@ -55,8 +55,15 @@ export const media = new Registry();
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
     const img = new Image();
-    img.onload = () => res(img);
-    img.onerror = () => rej(new Error("image load failed"));
+    const to = window.setTimeout(() => rej(new Error("image load timeout")), 8000);
+    img.onload = () => {
+      window.clearTimeout(to);
+      res(img);
+    };
+    img.onerror = () => {
+      window.clearTimeout(to);
+      rej(new Error("image load failed"));
+    };
     img.src = url;
   });
 }
@@ -68,8 +75,15 @@ function loadVideoEl(url: string): Promise<HTMLVideoElement> {
     v.playsInline = true;
     v.muted = true;
     v.crossOrigin = "anonymous";
-    v.onloadedmetadata = () => res(v);
-    v.onerror = () => rej(new Error("video load failed"));
+    const to = window.setTimeout(() => rej(new Error("video load timeout")), 8000);
+    v.onloadedmetadata = () => {
+      window.clearTimeout(to);
+      res(v);
+    };
+    v.onerror = () => {
+      window.clearTimeout(to);
+      rej(new Error("video load failed"));
+    };
     v.src = url;
   });
 }
@@ -151,8 +165,15 @@ export async function ingestFile(file: File, reuseId?: string): Promise<LoadedAs
     el.preload = "auto";
     el.src = url;
     await new Promise<void>((r) => {
-      el.onloadedmetadata = () => r();
-      el.onerror = () => r();
+      const to = window.setTimeout(() => r(), 8000);
+      el.onloadedmetadata = () => {
+        window.clearTimeout(to);
+        r();
+      };
+      el.onerror = () => {
+        window.clearTimeout(to);
+        r();
+      };
     });
     if (!meta.duration) meta.duration = el.duration || 0;
     media.audioEl.set(id, el);
@@ -164,15 +185,22 @@ export async function ingestFile(file: File, reuseId?: string): Promise<LoadedAs
     meta.hasAudio = true;
   } else {
     const bunny = await probeWithBunny(file);
-    const v = await loadVideoEl(url);
-    meta.width = bunny?.width || v.videoWidth;
-    meta.height = bunny?.height || v.videoHeight;
-    meta.duration = bunny?.duration || v.duration || 0;
-    meta.hasAudio = bunny?.hasAudio ?? (v as HTMLVideoElement & { mozHasAudio?: boolean }).mozHasAudio !== false;
-    v.muted = false;
-    media.videos.set(id, v);
-    try { v.currentTime = Math.min(0.2, (v.duration || 1) * 0.05); } catch { /* */ }
-    v.addEventListener("seeked", () => { media.thumbCanvases.delete(id); ensureThumb(id); }, { once: true });
+    let v: HTMLVideoElement | null = null;
+    try {
+      v = await loadVideoEl(url);
+    } catch {
+      v = null;
+    }
+    meta.width = bunny?.width || v?.videoWidth;
+    meta.height = bunny?.height || v?.videoHeight;
+    meta.duration = bunny?.duration || v?.duration || 0;
+    meta.hasAudio = bunny?.hasAudio ?? true;
+    if (v) {
+      v.muted = false;
+      media.videos.set(id, v);
+      try { v.currentTime = Math.min(0.2, (v.duration || 1) * 0.05); } catch { /* */ }
+      v.addEventListener("seeked", () => { media.thumbCanvases.delete(id); ensureThumb(id); }, { once: true });
+    }
     if (bunny) {
       media.inputs.set(id, bunny.input);
       if (bunny.sink) media.sinks.set(id, bunny.sink);
@@ -181,15 +209,24 @@ export async function ingestFile(file: File, reuseId?: string): Promise<LoadedAs
     if (decoded) {
       media.audioBuffers.set(id, decoded);
       meta.hasAudio = true;
+      if (!meta.duration) meta.duration = decoded.duration;
     }
+    if (!meta.duration && !v && !bunny) throw new Error("video load failed");
   }
 
   media.assets.set(id, meta);
   return meta;
 }
 
-export function sourceTime(clip: { trimIn: number; start: number; speed?: number }, t: number) {
-  return Math.max(0, clip.trimIn + (t - clip.start) * clipSpeed(clip));
+export function sourceTime(
+  clip: { trimIn: number; start: number; speed?: number; duration?: number },
+  t: number,
+) {
+  const spd = clipSpeed(clip);
+  const st = clip.trimIn + (t - clip.start) * spd;
+  if (clip.duration == null || clip.duration <= 0) return Math.max(0, st);
+  const max = clip.trimIn + clip.duration * spd - 1e-4;
+  return Math.max(clip.trimIn, Math.min(st, max));
 }
 
 export function coverDraw(
@@ -256,7 +293,15 @@ export function peaksFor(id: string, bins = 80): number[] | null {
 }
 
 export async function frameForClip(
-  clip: { id: string; assetId?: string; type: string; trimIn: number; start: number; speed?: number },
+  clip: {
+    id: string;
+    assetId?: string;
+    type: string;
+    trimIn: number;
+    start: number;
+    speed?: number;
+    duration?: number;
+  },
   t: number,
   preferLive: boolean,
 ): Promise<CanvasImageSource | null> {
@@ -294,17 +339,21 @@ export async function frameForClip(
 
 export function seekVideo(v: HTMLVideoElement, t: number): Promise<void> {
   return new Promise((res) => {
+    let settled = false;
     const done = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(to);
       v.removeEventListener("seeked", done);
       res();
     };
+    const to = window.setTimeout(done, 280);
     v.addEventListener("seeked", done);
     try {
       v.currentTime = Math.max(0, Math.min(t, (v.duration || t) - 0.001));
     } catch {
-      res();
+      done();
     }
-    setTimeout(done, 280);
   });
 }
 

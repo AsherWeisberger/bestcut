@@ -9,6 +9,7 @@ export function EmptyState() {
   const take = (files: FileList | File[] | null) => {
     if (!files || !files.length) return;
     importFiles([...files]);
+    if (input.current) input.current.value = "";
   };
 
   return (

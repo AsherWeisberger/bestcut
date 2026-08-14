@@ -203,8 +203,23 @@ export function Editor() {
   const showSheet = phone && sheet;
   const mediaClip = kind === "video" || kind === "audio" || kind === "image";
 
+  const takeFiles = (list: FileList | File[] | null) => {
+    if (!list || !list.length) return;
+    importFiles([...list]);
+  };
+
   return (
-    <div className="app">
+    <div
+      className="app"
+      onDragOver={(e) => {
+        if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer?.files?.length) return;
+        e.preventDefault();
+        takeFiles(e.dataTransfer.files);
+      }}
+    >
       <header className="topbar">
         <Mark onLong={() => setDebug(true)} />
         <div className="top-spacer" />
@@ -249,7 +264,10 @@ export function Editor() {
         type="file"
         multiple
         accept="video/*,audio/*,image/*"
-        onChange={(e) => e.target.files && importFiles([...e.target.files])}
+        onChange={(e) => {
+          takeFiles(e.target.files);
+          e.target.value = "";
+        }}
       />
     </div>
   );

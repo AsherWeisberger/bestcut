@@ -525,12 +525,15 @@ export function visibleMediaClips(project: Project, t: number): Clip[] {
   return project.clips.filter((c) => {
     if (c.type !== "video" && c.type !== "image") return false;
     if (covers(c, t)) return true;
-    const td = transDur(c, fps);
-    if (td > 0 && (c.transitionIn === "dissolve" || c.transitionIn === "slide" || c.transitionIn === "wipe")) {
-      const next = trackClips(project, c.trackId).find(
-        (n) => n.start >= clipEnd(c) - 0.02 && n.start <= clipEnd(c) + 0.02,
-      );
-      if (next && t >= next.start && t < next.start + td) return true;
+    // Incoming dissolve/slide/wipe lives on the NEXT clip. Keep this clip in the
+    // frame bank so the compositor can draw the outgoing frame.
+    const next = trackClips(project, c.trackId).find(
+      (n) => n.id !== c.id && Math.abs(n.start - clipEnd(c)) <= 0.04,
+    );
+    if (!next) return false;
+    const td = transDur(next, fps);
+    if (td > 0 && (next.transitionIn === "dissolve" || next.transitionIn === "slide" || next.transitionIn === "wipe")) {
+      if (t >= next.start && t < next.start + td) return true;
     }
     return false;
   });
