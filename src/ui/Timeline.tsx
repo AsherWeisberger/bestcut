@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { clipEnd, projectDuration, type Clip } from "../types";
+import { clipEnd, clipSpeed, fmtSpeed, projectDuration, type Clip } from "../types";
 import { useEditor } from "../store";
 import { ensureThumb, media, peaksFor } from "../engine/media";
 
@@ -86,15 +86,19 @@ export function Timeline() {
   const cycleTransition = useEditor((s) => s.cycleTransition);
   const dropAsset = useEditor((s) => s.dropAsset);
   const push = useEditor((s) => s.push);
+  const speedMarkIn = useEditor((s) => s.speedMarkIn);
+  const speedMarkOut = useEditor((s) => s.speedMarkOut);
+  const setSpeedMarks = useEditor((s) => s.setSpeedMarks);
   const dur = Math.max(8, projectDuration(project) + 2);
   const width = dur * zoom;
   const drag = useRef<{
     id: string;
-    mode: "move" | "in" | "out";
+    mode: "move" | "in" | "out" | "band" | "band-in" | "band-out";
     originX: number;
     originStart: number;
     originDur: number;
     alt?: boolean;
+    bandA?: number;
   } | null>(null);
   const laneRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -108,12 +112,12 @@ export function Timeline() {
     return Math.max(0, x / zoom);
   };
 
-  const onPointer = (e: React.PointerEvent, id: string, mode: "move" | "in" | "out") => {
+  const onPointer = (e: React.PointerEvent, id: string, mode: "move" | "in" | "out" | "band" | "band-in" | "band-out") => {
     e.stopPropagation();
     const c = project.clips.find((x) => x.id === id);
     if (!c) return;
     select(id);
-    push();
+    if (mode === "move" || mode === "in" || mode === "out") push();
     drag.current = {
       id,
       mode,
@@ -122,6 +126,12 @@ export function Timeline() {
       originDur: c.duration,
       alt: e.altKey,
     };
+    if (mode === "band") {
+      const t = timeFromX(e.clientX);
+      const tClip = Math.max(c.start, Math.min(t, clipEnd(c)));
+      drag.current.bandA = tClip;
+      setSpeedMarks(tClip, tClip);
+    }
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
@@ -131,7 +141,15 @@ export function Timeline() {
     const dt = (e.clientX - d.originX) / zoom;
     if (d.mode === "move") moveClip(d.id, d.originStart + dt);
     else if (d.mode === "in") trimClip(d.id, "in", d.originStart + dt);
-    else trimClip(d.id, "out", d.originStart + d.originDur + dt);
+    else if (d.mode === "out") trimClip(d.id, "out", d.originStart + d.originDur + dt);
+    else {
+      const c = useEditor.getState().project.clips.find((x) => x.id === d.id);
+      if (!c) return;
+      const t = Math.max(c.start, Math.min(timeFromX(e.clientX), clipEnd(c)));
+      if (d.mode === "band") setSpeedMarks(d.bandA ?? t, t);
+      else if (d.mode === "band-in") setSpeedMarks(t, speedMarkOut ?? clipEnd(c));
+      else setSpeedMarks(speedMarkIn ?? c.start, t);
+    }
   };
 
   const onUp = () => {
@@ -267,7 +285,7 @@ export function Timeline() {
                 .map((c) => (
                   <div
                     key={c.id}
-                    className={`clip ${kindClass(c)} ${selectedId === c.id ? "on" : ""}`}
+                    className={`clip ${kindClass(c)} ${selectedId === c.id ? "on" : ""} ${clipSpeed(c) !== 1 ? "sped" : ""}`}
                     style={{ left: c.start * zoom, width: Math.max(16, c.duration * zoom) }}
                     onPointerDown={(e) => onPointer(e, c.id, "move")}
                   >
@@ -276,6 +294,34 @@ export function Timeline() {
                       <Film clip={c} width={Math.max(16, c.duration * zoom)} height={tr.kind === "video" ? 48 : 30} zoom={zoom} />
                     )}
                     <span className="clip-lab">{clipLabel(c, assets[c.assetId || ""]?.name)}</span>
+                    {clipSpeed(c) !== 1 && <em className="spd-badge">{fmtSpeed(clipSpeed(c))}</em>}
+                    {(c.type === "video" || c.type === "audio") && selectedId === c.id && (
+                      <>
+                        <i
+                          className="speed-rail"
+                          title="Drag a stretch to speed"
+                          onPointerDown={(e) => onPointer(e, c.id, "band")}
+                        />
+                        {speedMarkIn != null && speedMarkOut != null && (
+                          <i
+                            className="speed-band"
+                            style={{
+                              left: Math.max(0, (Math.min(speedMarkIn, speedMarkOut) - c.start) * zoom),
+                              width: Math.max(4, Math.abs(speedMarkOut - speedMarkIn) * zoom),
+                            }}
+                          >
+                            <b
+                              className="band-h in"
+                              onPointerDown={(e) => onPointer(e, c.id, "band-in")}
+                            />
+                            <b
+                              className="band-h out"
+                              onPointerDown={(e) => onPointer(e, c.id, "band-out")}
+                            />
+                          </i>
+                        )}
+                      </>
+                    )}
                     <i className="handle out" onPointerDown={(e) => onPointer(e, c.id, "out")} />
                   </div>
                 ))}

@@ -32,9 +32,10 @@ export function App() {
         if (!alive) return;
         if (location.search.includes("debug=1")) setDebug(true);
         hydrate(saved || emptyProject(), metas);
-        if (location.search.includes("proof") && !(saved && saved.clips.length)) {
-          const { seedProof } = await import("./engine/demo");
-          await seedProof();
+        if (location.search.includes("proof")) {
+          const { seedProof, seedSpeedProof } = await import("./engine/demo");
+          if (/proof=speed/.test(location.search)) await seedSpeedProof();
+          else if (!(saved && saved.clips.length)) await seedProof();
         }
       } catch {
         if (alive) hydrate(emptyProject(), []);

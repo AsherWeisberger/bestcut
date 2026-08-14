@@ -21,7 +21,7 @@ import {
   IconTrash,
   IconVol,
 } from "./icons";
-import { SPEEDS } from "../types";
+import { SPEEDS, clipSpeed, fmtSpeed } from "../types";
 
 function Mark({ onLong }: { onLong: () => void }) {
   const t = useRef<number>(0);
@@ -70,6 +70,7 @@ export function Editor() {
   const deleteSelected = useEditor((s) => s.deleteSelected);
   const duplicateSelected = useEditor((s) => s.duplicateSelected);
   const updateClip = useEditor((s) => s.updateClip);
+  const setClipSpeed = useEditor((s) => s.setClipSpeed);
   const setRipple = useEditor((s) => s.setRipple);
   const ripple = useEditor((s) => s.ripple);
   const cycleTransition = useEditor((s) => s.cycleTransition);
@@ -112,10 +113,10 @@ export function Editor() {
   };
 
   const cycleSpeed = () => {
-    if (!clip) return;
-    const cur = clip.speed || 1;
+    if (!clip || (clip.type !== "video" && clip.type !== "audio")) return;
+    const cur = clipSpeed(clip);
     const i = SPEEDS.indexOf(cur as (typeof SPEEDS)[number]);
-    updateClip(clip.id, { speed: SPEEDS[(i + 1) % SPEEDS.length] });
+    setClipSpeed(clip.id, SPEEDS[(i + 1) % SPEEDS.length]);
   };
 
   const dockNothing = (
@@ -157,7 +158,7 @@ export function Editor() {
       </button>
       <button onClick={cycleSpeed}>
         <IconSpeed />
-        {(clip?.speed || 1) === 1 ? "1×" : `${clip?.speed}×`}
+        {fmtSpeed(clip ? clipSpeed(clip) : 1)}
       </button>
       <button onClick={() => setSheet(true)}>
         <IconVol />

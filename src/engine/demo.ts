@@ -49,3 +49,28 @@ export async function seedProof() {
   ed.setPlayhead(1.35);
   ed.setPlaying(false);
 }
+
+export async function seedSpeedProof() {
+  const a = await png("#2a261e", "CLIP 01");
+  const b = await png("#1c242c", "CLIP 02");
+  const ed = useEditor.getState();
+  await ed.importFiles([a, b]);
+  const first = useEditor.getState().project.clips.find((c) => c.trackId === "trk_v1");
+  if (!first) return;
+  ed.updateClip(first.id, { type: "video", duration: 8, sourceDuration: 8 });
+  const packed = useEditor.getState().project.clips.find((c) => c.id === first.id);
+  if (!packed) return;
+  ed.select(packed.id);
+  ed.setSpeedMarks(packed.start + 2.15, packed.start + 5.35);
+  ed.applyRangeSpeed(4);
+  const mid = useEditor
+    .getState()
+    .project.clips.filter((c) => c.trackId === "trk_v1")
+    .sort((a, b) => a.start - b.start)
+    .find((c) => (c.speed || 1) !== 1);
+  if (mid) ed.select(mid.id);
+  ed.setPlayhead(mid ? mid.start + mid.duration * 0.4 : 2.4);
+  ed.setPlaying(false);
+  ed.setBinTab("media");
+  ed.fitZoom(980);
+}

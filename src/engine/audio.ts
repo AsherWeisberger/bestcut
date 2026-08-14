@@ -74,6 +74,7 @@ export function mixProjectAudio(project: Project, duration: number): AudioBuffer
       const t = oi / SR;
       let g = clipGain(c, t);
       if (isBgm) g *= duck[oi];
+      // sourceTime already applies clip.speed (resample / chipmunk). Export uses this mix.
       const st = sourceTime(c, t);
       const si = Math.floor(st * buf.sampleRate);
       if (si < 0 || si >= sL.length) continue;

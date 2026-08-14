@@ -47,7 +47,7 @@ export const TITLE_OUTS: { id: OutPreset; name: string }[] = [
   { id: "hold", name: "Hold" },
 ];
 export const TRANSITIONS: TransitionKind[] = ["cut", "fade", "dissolve", "slide", "wipe"];
-export const SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3];
+export const SPEEDS = [0.5, 1, 2, 3, 4, 5, 8, 10];
 export const CAPTION_STYLES: CaptionStyle[] = ["plate", "stroke", "karaoke", "stack"];
 
 export interface AssetMeta {
@@ -118,8 +118,25 @@ export interface Project {
   magnetic?: boolean;
 }
 
+export function clipSpeed(c: { speed?: number }): number {
+  return c.speed && c.speed > 0 ? c.speed : 1;
+}
+
 export function clipEnd(c: Clip): number {
   return c.start + c.duration;
+}
+
+export function sourceSpan(c: Clip): number {
+  return Math.max(0, c.duration * clipSpeed(c));
+}
+
+export function trimOut(c: Clip): number {
+  return c.trimIn + sourceSpan(c);
+}
+
+export function fmtSpeed(sp: number): string {
+  const n = Number.isInteger(sp) ? String(sp) : String(sp);
+  return `${n}×`;
 }
 
 export function projectDuration(p: Project): number {

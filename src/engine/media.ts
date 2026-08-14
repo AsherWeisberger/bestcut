@@ -5,7 +5,7 @@ import {
   VideoSampleSink,
 } from "mediabunny";
 import type { AssetMeta } from "../types";
-import { uid } from "../types";
+import { clipSpeed, uid } from "../types";
 
 export type LoadedAsset = AssetMeta & {
   file: File;
@@ -189,8 +189,7 @@ export async function ingestFile(file: File, reuseId?: string): Promise<LoadedAs
 }
 
 export function sourceTime(clip: { trimIn: number; start: number; speed?: number }, t: number) {
-  const spd = clip.speed && clip.speed > 0 ? clip.speed : 1;
-  return Math.max(0, clip.trimIn + (t - clip.start) * spd);
+  return Math.max(0, clip.trimIn + (t - clip.start) * clipSpeed(clip));
 }
 
 export function coverDraw(
@@ -257,7 +256,7 @@ export function peaksFor(id: string, bins = 80): number[] | null {
 }
 
 export async function frameForClip(
-  clip: { id: string; assetId?: string; type: string; trimIn: number; start: number },
+  clip: { id: string; assetId?: string; type: string; trimIn: number; start: number; speed?: number },
   t: number,
   preferLive: boolean,
 ): Promise<CanvasImageSource | null> {

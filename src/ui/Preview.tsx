@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
-import { ASPECT_SIZE, fmtTime, projectDuration } from "../types";
+import { ASPECT_SIZE, clipEnd, clipSpeed, fmtTime, projectDuration } from "../types";
 import { useEditor } from "../store";
-import { media } from "../engine/media";
+import { media, sourceTime } from "../engine/media";
 import { PreviewAudio } from "../engine/audio";
 import { renderFrame, visibleMediaClips, type FrameBank } from "../engine/render";
 import { IconPause, IconPlay, IconSplit, IconUndo } from "./icons";
@@ -39,7 +39,19 @@ export function Preview({ onExport }: { onExport?: () => void }) {
         if (img) bank.frames.set(c.id, img);
       } else {
         const v = media.videos.get(c.assetId);
-        if (v) bank.frames.set(c.id, v);
+        if (v) {
+          if (!useEditor.getState().playing) {
+            const st = sourceTime(c, t);
+            if (Math.abs(v.currentTime - st) > 0.04) {
+              try {
+                v.currentTime = Math.max(0, Math.min(st, (v.duration || st) - 0.001));
+              } catch {
+                /* */
+              }
+            }
+          }
+          bank.frames.set(c.id, v);
+        }
       }
     }
     renderFrame(ctx, t, project, bank);
@@ -60,17 +72,38 @@ export function Preview({ onExport }: { onExport?: () => void }) {
     let last = performance.now();
     let t = useEditor.getState().playhead;
     audio.play(project, t, dur).catch(() => {});
-    for (const c of project.clips) {
-      if (c.type !== "video" || !c.assetId) continue;
-      const v = media.videos.get(c.assetId);
-      if (!v) continue;
-      const spd = c.speed && c.speed > 0 ? c.speed : 1;
-      const st = c.trimIn + Math.max(0, t - c.start) * spd;
-      v.currentTime = st;
-      v.muted = true;
-      v.playbackRate = spd;
-      v.play().catch(() => {});
-    }
+    const syncVideos = (at: number) => {
+      const covering = new Map<string, (typeof project.clips)[number]>();
+      for (const c of project.clips) {
+        if (c.type !== "video" || !c.assetId) continue;
+        if (at >= c.start - 1e-4 && at < clipEnd(c) - 1e-6) covering.set(c.assetId, c);
+      }
+      for (const [id, v] of media.videos) {
+        const c = covering.get(id);
+        if (!c) {
+          if (!v.paused) v.pause();
+          continue;
+        }
+        const spd = clipSpeed(c);
+        const st = sourceTime(c, at);
+        v.muted = true;
+        try {
+          const rate = Math.min(16, Math.max(0.0625, spd));
+          if (Math.abs(v.playbackRate - rate) > 0.001) v.playbackRate = rate;
+        } catch {
+          /* */
+        }
+        if (Math.abs(v.currentTime - st) > Math.max(0.12, 0.04 * spd)) {
+          try {
+            v.currentTime = Math.max(0, Math.min(st, (v.duration || st) - 0.001));
+          } catch {
+            /* */
+          }
+        }
+        if (v.paused) v.play().catch(() => {});
+      }
+    };
+    syncVideos(t);
     const loop = (now: number) => {
       const dt = Math.min(0.08, (now - last) / 1000);
       last = now;
@@ -82,6 +115,7 @@ export function Preview({ onExport }: { onExport?: () => void }) {
         paint(t);
         return;
       }
+      syncVideos(t);
       useEditor.getState().setPlayhead(t);
       paint(t);
       raf = requestAnimationFrame(loop);

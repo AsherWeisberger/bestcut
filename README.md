@@ -14,6 +14,7 @@ CapCut paywalls basics. OpenCut still ships a backend classic and blocks phones.
 - Import from disk (camera roll). No upload.
 - Timeline: video, overlay, audio, captions.
 - Split, trim, snap, undo, ripple, kinetic titles, in-tab auto captions (Whisper-tiny) plus SRT.
+- Speed 0.5×–10× on a whole clip, or a marked In/Out stretch (splits, shortens, ripples). Preview and export share one renderer.
 - Export 1080p 30fps MP4 and WebM. Preview equals export.
 - IndexedDB + project JSON download.
 

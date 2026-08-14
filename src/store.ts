@@ -3,6 +3,7 @@ import {
   SNAP,
   blankClip,
   clipEnd,
+  clipSpeed,
   emptyProject,
   nextTransition,
   projectDuration,
@@ -19,6 +20,7 @@ import {
 } from "./types";
 import { persistAsset, persistProject } from "./db";
 import { ingestFile, media } from "./engine/media";
+import { rangeSpeedPieces, replaceClipWithPieces, setClipSpeedResult } from "./engine/speed";
 
 function clone<T>(x: T): T {
   return JSON.parse(JSON.stringify(x));
@@ -84,6 +86,8 @@ type Editor = {
   snapGuide: number | null;
   debug: boolean;
   binTab: BinTab;
+  speedMarkIn: number | null;
+  speedMarkOut: number | null;
   push: () => void;
   undo: () => void;
   redo: () => void;
@@ -120,6 +124,12 @@ type Editor = {
   setToast: (t: string | null) => void;
   mergeCaptionWithNext: () => void;
   splitCaptionAt: (index: number) => void;
+  markSpeedIn: () => void;
+  markSpeedOut: () => void;
+  clearSpeedMarks: () => void;
+  setSpeedMarks: (a: number | null, b: number | null) => void;
+  setClipSpeed: (id: string, speed: number) => void;
+  applyRangeSpeed: (speed: number, clipId?: string) => void;
 };
 
 let persistTimer: number | undefined;
@@ -144,6 +154,8 @@ export const useEditor = create<Editor>((set, get) => ({
   snapGuide: null,
   debug: typeof window !== "undefined" && /(?:\?|&)debug=1/.test(window.location.search),
   binTab: "media",
+  speedMarkIn: null,
+  speedMarkOut: null,
 
   push() {
     const { project, past } = get();
@@ -195,7 +207,11 @@ export const useEditor = create<Editor>((set, get) => ({
     schedulePersist(project);
   },
   select(id) {
-    set({ selectedId: id });
+    const clear = id !== get().selectedId;
+    set({
+      selectedId: id,
+      ...(clear ? { speedMarkIn: null, speedMarkOut: null } : {}),
+    });
   },
   setSnap(v) {
     set({ snap: v });
@@ -468,17 +484,18 @@ export const useEditor = create<Editor>((set, get) => ({
     pts.push(get().playhead);
     const { t: st, hit } = snapTime(t, pts, snap);
     let nextC = { ...c };
+    const spd = clipSpeed(c);
     if (edge === "in") {
       const newStart = Math.max(0, Math.min(st, clipEnd(c) - 0.12));
       const delta = newStart - c.start;
-      const newTrim = Math.max(0, c.trimIn + delta);
+      const newTrim = Math.max(0, c.trimIn + delta * spd);
       if (c.sourceDuration && newTrim >= c.sourceDuration - 0.12) return;
       nextC.start = newStart;
       nextC.trimIn = newTrim;
       nextC.duration = Math.max(0.12, c.duration - delta);
     } else {
       nextC.duration = Math.max(0.12, st - c.start);
-      if (c.sourceDuration) nextC.duration = Math.min(nextC.duration, c.sourceDuration - c.trimIn);
+      if (c.sourceDuration) nextC.duration = Math.min(nextC.duration, (c.sourceDuration - c.trimIn) / spd);
     }
     let clips = project.clips.map((x) => (x.id === id ? nextC : x));
     if (ripple || (project.magnetic !== false && c.trackId === "trk_v1")) {
@@ -515,13 +532,14 @@ export const useEditor = create<Editor>((set, get) => ({
     let selectId = selectedId;
     for (const hit of targets) {
       const lt = playhead - hit.start;
+      const spd = clipSpeed(hit);
       const left = { ...hit, duration: lt };
       const right = {
         ...hit,
         id: uid("cl"),
         start: playhead,
         duration: hit.duration - lt,
-        trimIn: hit.trimIn + lt,
+        trimIn: hit.trimIn + lt * spd,
         transitionIn: "cut" as TransitionKind,
       };
       clips = clips.flatMap((c) => (c.id === hit.id ? [left, right] : [c]));
@@ -627,6 +645,91 @@ export const useEditor = create<Editor>((set, get) => ({
     const next = { ...project, clips };
     set({ project: next, selectedId: b.id });
     schedulePersist(next);
+  },
+  markSpeedIn() {
+    const { project, selectedId, playhead } = get();
+    const clip = project.clips.find((c) => c.id === selectedId);
+    if (!clip || (clip.type !== "video" && clip.type !== "audio")) {
+      set({ toast: "Select a video or audio clip." });
+      return;
+    }
+    const end = clipEnd(clip);
+    if (playhead < clip.start - 0.04 || playhead > end + 0.04) {
+      set({ toast: "Park the playhead on this clip." });
+      return;
+    }
+    const t = Math.max(clip.start, Math.min(playhead, end));
+    const out = get().speedMarkOut;
+    if (out != null && out < t) set({ speedMarkIn: out, speedMarkOut: t });
+    else set({ speedMarkIn: t });
+  },
+  markSpeedOut() {
+    const { project, selectedId, playhead } = get();
+    const clip = project.clips.find((c) => c.id === selectedId);
+    if (!clip || (clip.type !== "video" && clip.type !== "audio")) {
+      set({ toast: "Select a video or audio clip." });
+      return;
+    }
+    const end = clipEnd(clip);
+    if (playhead < clip.start - 0.04 || playhead > end + 0.04) {
+      set({ toast: "Park the playhead on this clip." });
+      return;
+    }
+    const t = Math.max(clip.start, Math.min(playhead, end));
+    const inn = get().speedMarkIn;
+    if (inn != null && t < inn) set({ speedMarkIn: t, speedMarkOut: inn });
+    else set({ speedMarkOut: t });
+  },
+  clearSpeedMarks() {
+    set({ speedMarkIn: null, speedMarkOut: null });
+  },
+  setSpeedMarks(a, b) {
+    if (a == null && b == null) {
+      set({ speedMarkIn: null, speedMarkOut: null });
+      return;
+    }
+    if (a != null && b != null && b < a) set({ speedMarkIn: b, speedMarkOut: a });
+    else set({ speedMarkIn: a, speedMarkOut: b });
+  },
+  setClipSpeed(id, speed) {
+    const clip = get().project.clips.find((c) => c.id === id);
+    if (!clip) return;
+    get().push();
+    const { next, delta } = setClipSpeedResult(clip, speed);
+    const originalEnd = clipEnd(clip);
+    let clips = get().project.clips.map((c) => (c.id === id ? next : c));
+    clips = clips.map((c) =>
+      c.trackId === clip.trackId && c.id !== id && c.start >= originalEnd - 1e-4
+        ? { ...c, start: Math.max(0, c.start + delta) }
+        : c,
+    );
+    const project = { ...get().project, clips };
+    project.clips = maybePack(project, clip.trackId);
+    set({ project, speedMarkIn: null, speedMarkOut: null });
+    schedulePersist(project);
+  },
+  applyRangeSpeed(speed, clipId) {
+    const id = clipId || get().selectedId;
+    if (!id) return;
+    const clip = get().project.clips.find((c) => c.id === id);
+    if (!clip || (clip.type !== "video" && clip.type !== "audio")) return;
+    const { speedMarkIn, speedMarkOut } = get();
+    if (speedMarkIn == null || speedMarkOut == null || Math.abs(speedMarkOut - speedMarkIn) < 0.05) {
+      get().setClipSpeed(clip.id, speed);
+      return;
+    }
+    get().push();
+    const result = rangeSpeedPieces(clip, speedMarkIn, speedMarkOut, speed);
+    let clips = replaceClipWithPieces(get().project.clips, clip, result.pieces, result.delta);
+    const project = { ...get().project, clips };
+    project.clips = maybePack(project, clip.trackId);
+    set({
+      project,
+      selectedId: result.selectId,
+      speedMarkIn: null,
+      speedMarkOut: null,
+    });
+    schedulePersist(project);
   },
 }));
 

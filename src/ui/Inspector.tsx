@@ -7,6 +7,9 @@ import {
   TITLE_INS,
   TITLE_OUTS,
   TRANSITIONS,
+  clipSpeed,
+  fmtSpeed,
+  fmtTime,
   type CaptionStyle,
   type OutPreset,
   type TextFace,
@@ -54,7 +57,15 @@ export function Inspector({
 }) {
   const project = useEditor((s) => s.project);
   const selectedId = useEditor((s) => s.selectedId);
+  const playhead = useEditor((s) => s.playhead);
+  const speedMarkIn = useEditor((s) => s.speedMarkIn);
+  const speedMarkOut = useEditor((s) => s.speedMarkOut);
   const updateClip = useEditor((s) => s.updateClip);
+  const setClipSpeed = useEditor((s) => s.setClipSpeed);
+  const applyRangeSpeed = useEditor((s) => s.applyRangeSpeed);
+  const markSpeedIn = useEditor((s) => s.markSpeedIn);
+  const markSpeedOut = useEditor((s) => s.markSpeedOut);
+  const clearSpeedMarks = useEditor((s) => s.clearSpeedMarks);
   const addCaptions = useEditor((s) => s.addCaptions);
   const addText = useEditor((s) => s.addText);
   const addCaption = useEditor((s) => s.addCaption);
@@ -325,22 +336,61 @@ export function Inspector({
               <>
                 <Section title="Timing">
                   <p className="hint">
-                    {clip.duration.toFixed(2)}s · in {clip.start.toFixed(2)}s
+                    {clip.duration.toFixed(2)}s on the timeline
+                    {clip.type !== "image" ? ` · ${fmtSpeed(clipSpeed(clip))}` : ""}
                   </p>
                   {clip.type !== "image" && (
                     <div className="field">
-                      <label>Speed</label>
-                      <div className="chip-row">
+                      <label>
+                        {speedMarkIn != null && speedMarkOut != null ? "Range speed" : "Speed"}
+                      </label>
+                      <div className="chip-row speed">
                         {SPEEDS.map((sp) => (
                           <button
                             key={sp}
-                            className={(clip.speed || 1) === sp ? "chip on" : "chip"}
-                            onClick={() => updateClip(clip.id, { speed: sp })}
+                            className={clipSpeed(clip) === sp ? "chip on" : "chip"}
+                            onClick={() => {
+                              if (speedMarkIn != null && speedMarkOut != null) applyRangeSpeed(sp);
+                              else setClipSpeed(clip.id, sp);
+                            }}
                           >
-                            {sp}×
+                            {fmtSpeed(sp)}
                           </button>
                         ))}
                       </div>
+                      <label>Range</label>
+                      <div className="row">
+                        <button
+                          className={speedMarkIn != null ? "ghost on" : "ghost"}
+                          onClick={markSpeedIn}
+                        >
+                          In
+                        </button>
+                        <button
+                          className={speedMarkOut != null ? "ghost on" : "ghost"}
+                          onClick={markSpeedOut}
+                        >
+                          Out
+                        </button>
+                        <button
+                          className="ghost"
+                          disabled={speedMarkIn == null && speedMarkOut == null}
+                          onClick={clearSpeedMarks}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <p className="hint">Speed just this stretch.</p>
+                      {(speedMarkIn != null || speedMarkOut != null) && (
+                        <p className="hint">
+                          {speedMarkIn != null ? fmtTime(speedMarkIn) : "In —"}
+                          {" – "}
+                          {speedMarkOut != null ? fmtTime(speedMarkOut) : "Out —"}
+                          {speedMarkIn != null && speedMarkOut != null
+                            ? ` · then tap a speed`
+                            : ` · playhead ${fmtTime(playhead)}`}
+                        </p>
+                      )}
                     </div>
                   )}
                 </Section>
