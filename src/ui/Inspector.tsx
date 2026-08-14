@@ -92,7 +92,7 @@ export function Inspector({
                 Title
               </button>
               <button className="ghost" onClick={() => onCaptionPass?.() || addCaption()}>
-                Auto caption
+                Caption pass
               </button>
             </div>
             <button className="ghost" onClick={() => srtRef.current?.click()}>
