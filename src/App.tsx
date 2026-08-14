@@ -11,6 +11,7 @@ export function App() {
   const project = useEditor((s) => s.project);
   const toast = useEditor((s) => s.toast);
   const hydrate = useEditor((s) => s.hydrate);
+  const setDebug = useEditor((s) => s.setDebug);
 
   useEffect(() => {
     let alive = true;
@@ -29,6 +30,7 @@ export function App() {
           }
         }
         if (!alive) return;
+        if (location.search.includes("debug=1")) setDebug(true);
         hydrate(saved || emptyProject(), metas);
         if (location.search.includes("proof") && !(saved && saved.clips.length)) {
           const { seedProof } = await import("./engine/demo");

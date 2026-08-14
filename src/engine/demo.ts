@@ -24,16 +24,28 @@ export async function seedProof() {
   const b = await png("#1c242c", "CLIP 02");
   const ed = useEditor.getState();
   await ed.importFiles([a, b]);
-  ed.setPlayhead(0.4);
-  ed.addText("slide-up");
+  ed.setPlayhead(0.2);
+  ed.addText("stamp");
   const title = useEditor.getState().project.clips.find((c) => c.type === "text");
-  if (title) ed.updateClip(title.id, { text: "Cut in the tab.", fontSize: 88, y: 0.36 });
-  ed.setPlayhead(1.1);
+  if (title) ed.updateClip(title.id, { text: "Cut in the tab.", fontSize: 88, y: 0.36, inPreset: "stamp", preset: "stamp" });
+  ed.setPlayhead(1.15);
   ed.addCaption("Bytes never leave this browser.");
-  ed.setPlayhead(3.4);
+  const caps = useEditor.getState().project.clips.filter((c) => c.type === "caption");
+  if (caps[0]) ed.updateClip(caps[0].id, { captionStyle: "stroke", y: 0.72 });
+  ed.setPlayhead(3.5);
   ed.addCaption("Split the miss. Title it. Export 9:16.");
-  ed.setPlayhead(0.8);
-  ed.addShape("star");
-  ed.setPlayhead(1.2);
+  const caps2 = useEditor.getState().project.clips.filter((c) => c.type === "caption");
+  const last = caps2[caps2.length - 1];
+  if (last) ed.updateClip(last.id, { captionStyle: "stroke", y: 0.72 });
+  ed.setBinTab("media");
+  const phone = typeof window !== "undefined" && window.innerWidth < 960;
+  if (phone) {
+    const first = useEditor.getState().project.clips.find((c) => c.trackId === "trk_v1");
+    if (first) ed.select(first.id);
+  } else {
+    const cap = useEditor.getState().project.clips.find((c) => c.type === "caption");
+    if (cap) ed.select(cap.id);
+  }
+  ed.setPlayhead(1.35);
   ed.setPlaying(false);
 }

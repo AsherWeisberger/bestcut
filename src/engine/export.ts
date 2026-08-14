@@ -143,10 +143,10 @@ async function exportWebCodecs(
     const bank = await fillBank(project, t, false);
     renderFrame(ctx, t, project, bank);
     await videoSource.add(t, 1 / FPS, { keyFrame: i % 30 === 0 });
-    if (i % 4 === 0) opts.onProgress?.(0.05 + (i / total) * 0.9, `Encoding ${i + 1}/${total}`);
+    if (i % 4 === 0) opts.onProgress?.(0.05 + (i / total) * 0.9, `Encoding ${Math.floor(t)} / ${Math.ceil(duration)}s`);
   }
   videoSource.close();
-  opts.onProgress?.(0.97, "Muxing");
+  opts.onProgress?.(0.97, format === "mp4" ? "Writing MP4" : "Writing WebM");
   await output.finalize();
   const buf = output.target.buffer;
   if (!buf) throw new Error("Empty export");
@@ -189,7 +189,7 @@ async function exportMediaRecorder(project: Project, duration: number, opts: Exp
     const t = i / FPS;
     const bank = await fillBank(project, t, false);
     renderFrame(ctx, t, project, bank);
-    opts.onProgress?.(i / total, `Recording ${i + 1}/${total}`);
+    opts.onProgress?.(i / total, `Encoding ${Math.floor(t)} / ${Math.ceil(duration)}s`);
     await new Promise((r) => setTimeout(r, 1000 / FPS));
   }
   rec.stop();

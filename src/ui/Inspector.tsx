@@ -1,37 +1,103 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { useEditor } from "../store";
 import { srtToClips } from "../engine/captions";
-import type { TextPreset, TransitionKind } from "../types";
+import {
+  CAPTION_STYLES,
+  SPEEDS,
+  TITLE_INS,
+  TITLE_OUTS,
+  TRANSITIONS,
+  type CaptionStyle,
+  type OutPreset,
+  type TextFace,
+  type TextPreset,
+  type TransitionKind,
+} from "../types";
 
-export function Inspector({ embedded = false }: { embedded?: boolean }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="sec">
+      <div className="pane-h tight">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function Chips<T extends string>({
+  value,
+  opts,
+  onChange,
+}: {
+  value: T;
+  opts: { id: T; name: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="chip-row">
+      {opts.map((o) => (
+        <button key={o.id} className={value === o.id ? "chip on" : "chip"} onClick={() => onChange(o.id)}>
+          {o.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Inspector({
+  embedded = false,
+  onCaptionPass,
+  onClose,
+}: {
+  embedded?: boolean;
+  onCaptionPass?: () => void;
+  onClose?: () => void;
+}) {
   const project = useEditor((s) => s.project);
   const selectedId = useEditor((s) => s.selectedId);
   const updateClip = useEditor((s) => s.updateClip);
   const addCaptions = useEditor((s) => s.addCaptions);
   const addText = useEditor((s) => s.addText);
   const addCaption = useEditor((s) => s.addCaption);
-  const addShape = useEditor((s) => s.addShape);
+  const styleAllCaptions = useEditor((s) => s.styleAllCaptions);
   const setTransition = useEditor((s) => s.setTransition);
+  const setPlayhead = useEditor((s) => s.setPlayhead);
+  const setPlaying = useEditor((s) => s.setPlaying);
+  const select = useEditor((s) => s.select);
+  const mergeCaptionWithNext = useEditor((s) => s.mergeCaptionWithNext);
+  const splitCaptionAt = useEditor((s) => s.splitCaptionAt);
   const srtRef = useRef<HTMLInputElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const clip = project.clips.find((c) => c.id === selectedId);
+  const captions = project.clips.filter((c) => c.type === "caption").sort((a, b) => a.start - b.start);
+  const header = clip ? clip.type.toUpperCase() : "INSPECTOR";
+
+  const pulseTitle = (id: string, start: number) => {
+    setPlayhead(start);
+    setPlaying(true);
+    window.setTimeout(() => {
+      const ed = useEditor.getState();
+      if (ed.selectedId === id) ed.setPlaying(false);
+    }, 1200);
+  };
 
   const body = (
     <>
-      <div className="pane-h">{clip ? clip.type : "Inspector"}</div>
+      <div className="pane-h">{header}</div>
       <div className="body">
         {!clip && (
           <>
-            <p className="hint">Select a clip, or add a title, sticker, or caption at the playhead.</p>
+            <p className="hint">Select a clip, or drop a title or caption at the playhead.</p>
             <div className="row">
-              <button className="ghost" onClick={() => addText("slide-up")}>Title</button>
-              <button className="ghost" onClick={() => addCaption()}>Caption</button>
+              <button className="ghost" onClick={() => addText("rise")}>
+                Title
+              </button>
+              <button className="ghost" onClick={() => onCaptionPass?.() || addCaption()}>
+                Caption pass
+              </button>
             </div>
-            <div className="row">
-              <button className="ghost" onClick={() => addShape("rect")}>Rect</button>
-              <button className="ghost" onClick={() => addShape("ellipse")}>Ellipse</button>
-              <button className="ghost" onClick={() => addShape("star")}>Star</button>
-            </div>
-            <button className="ghost" onClick={() => srtRef.current?.click()}>Import SRT</button>
+            <button className="ghost" onClick={() => srtRef.current?.click()}>
+              Import SRT
+            </button>
             <input
               ref={srtRef}
               className="sr"
@@ -40,10 +106,27 @@ export function Inspector({ embedded = false }: { embedded?: boolean }) {
               onChange={async (e) => {
                 const f = e.target.files?.[0];
                 if (!f) return;
-                const text = await f.text();
-                addCaptions(srtToClips(text, "trk_cc"));
+                addCaptions(srtToClips(await f.text()));
               }}
             />
+            {captions.length > 0 && (
+              <Section title="Transcript">
+                <div className="transcript">
+                  {captions.map((c) => (
+                    <button
+                      key={c.id}
+                      className="tr-line"
+                      onClick={() => {
+                        select(c.id);
+                        setPlayhead(c.start);
+                      }}
+                    >
+                      {c.text}
+                    </button>
+                  ))}
+                </div>
+              </Section>
+            )}
           </>
         )}
         {clip && (
@@ -51,101 +134,320 @@ export function Inspector({ embedded = false }: { embedded?: boolean }) {
             {(clip.type === "text" || clip.type === "caption") && (
               <div className="field">
                 <label>Copy</label>
-                <textarea value={clip.text} onChange={(e) => updateClip(clip.id, { text: e.target.value })} />
+                <textarea
+                  ref={taRef}
+                  value={clip.text}
+                  onChange={(e) => updateClip(clip.id, { text: e.target.value })}
+                />
               </div>
             )}
-            {clip.type === "text" && (
-              <div className="field">
-                <label>Motion</label>
-                <select
-                  value={clip.preset}
-                  onChange={(e) => updateClip(clip.id, { preset: e.target.value as TextPreset })}
-                >
-                  <option value="fade">Fade</option>
-                  <option value="slide-up">Slide up</option>
-                  <option value="pop">Pop</option>
-                  <option value="type-on">Type on</option>
-                </select>
-              </div>
-            )}
-            {(clip.type === "video" || clip.type === "audio") && (
+
+            {clip.type === "caption" && (
               <>
-                <div className="field">
-                  <label>Volume {Math.round(clip.volume * 100)}%</label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1.5}
-                    step={0.01}
-                    value={clip.volume}
-                    onChange={(e) => updateClip(clip.id, { volume: +e.target.value })}
-                  />
-                </div>
-                <div className="row">
-                  <div className="field">
-                    <label>Fade in</label>
-                    <input
-                      type="range"
-                      min={0}
-                      max={2}
-                      step={0.05}
-                      value={clip.fadeIn}
-                      onChange={(e) => updateClip(clip.id, { fadeIn: +e.target.value })}
-                    />
+                <Section title="Look">
+                  <div className="style-grid">
+                    {CAPTION_STYLES.map((st) => (
+                      <button
+                        key={st}
+                        className={clip.captionStyle === st ? "style-tile on" : "style-tile"}
+                        onClick={() => updateClip(clip.id, { captionStyle: st })}
+                      >
+                        {st}
+                      </button>
+                    ))}
                   </div>
-                  <div className="field">
-                    <label>Fade out</label>
-                    <input
-                      type="range"
-                      min={0}
-                      max={2}
-                      step={0.05}
-                      value={clip.fadeOut}
-                      onChange={(e) => updateClip(clip.id, { fadeOut: +e.target.value })}
-                    />
+                  {clip.captionGroup === false && <p className="hint">This line only</p>}
+                  <div className="row">
+                    <button className="ghost" onClick={() => styleAllCaptions((clip.captionStyle || "stroke") as CaptionStyle)}>
+                      Style all
+                    </button>
+                    <button className="ghost" onClick={mergeCaptionWithNext}>
+                      Merge next
+                    </button>
                   </div>
-                </div>
-                <div className="field">
-                  <label>Role</label>
-                  <select
-                    value={clip.role}
-                    onChange={(e) => updateClip(clip.id, { role: e.target.value as "voice" | "bgm" | "none" })}
+                  <button
+                    className="ghost"
+                    onClick={() => {
+                      const el = taRef.current;
+                      if (!el) return;
+                      splitCaptionAt(el.selectionStart || Math.floor(clip.text.length / 2));
+                    }}
                   >
-                    <option value="voice">Voice (ducks music)</option>
-                    <option value="bgm">BGM (gets ducked)</option>
-                    <option value="none">None</option>
-                  </select>
-                </div>
+                    Split at caret
+                  </button>
+                </Section>
+                <Section title="Transcript">
+                  <div className="transcript">
+                    {captions.map((c) => (
+                      <button
+                        key={c.id}
+                        className={`tr-line ${c.id === clip.id ? "on" : ""}`}
+                        onClick={() => {
+                          select(c.id);
+                          setPlayhead(c.start);
+                        }}
+                      >
+                        {c.text}
+                      </button>
+                    ))}
+                  </div>
+                </Section>
               </>
             )}
-            {clip.type === "video" && (
-              <div className="field">
-                <label>Transition in</label>
-                <select
-                  value={clip.transitionIn}
-                  onChange={(e) => setTransition(e.target.value as TransitionKind)}
-                >
-                  <option value="cut">Cut</option>
-                  <option value="fade">Fade</option>
-                  <option value="dissolve">Dissolve</option>
-                </select>
-              </div>
+
+            {clip.type === "text" && (
+              <>
+                <Section title="Look">
+                  <div className="field">
+                    <label>Face</label>
+                    <div className="seg">
+                      {(["fraunces", "sora"] as TextFace[]).map((f) => (
+                        <button
+                          key={f}
+                          className={clip.textFace === f ? "on" : ""}
+                          onClick={() => updateClip(clip.id, { textFace: f })}
+                        >
+                          {f === "fraunces" ? "Fraunces" : "Sora"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="field">
+                    <label>Size {clip.fontSize}</label>
+                    <input
+                      type="range"
+                      min={48}
+                      max={160}
+                      step={1}
+                      value={clip.fontSize}
+                      onChange={(e) => updateClip(clip.id, { fontSize: +e.target.value })}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Color</label>
+                    <div className="chip-row">
+                      {[
+                        ["#F0EFEC", "Paper"],
+                        ["#D9CCAC", "Sand"],
+                        ["#0D0F14", "Ink"],
+                      ].map(([hex, name]) => (
+                        <button
+                          key={hex}
+                          className={clip.color.toLowerCase() === hex.toLowerCase() ? "swatch on" : "swatch"}
+                          style={{ background: hex }}
+                          title={name}
+                          onClick={() => updateClip(clip.id, { color: hex })}
+                        />
+                      ))}
+                      <input
+                        className="hex"
+                        value={clip.color}
+                        onChange={(e) => updateClip(clip.id, { color: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </Section>
+                <Section title="Motion">
+                  <label className="micro">In</label>
+                  <div className="style-grid tight">
+                    {TITLE_INS.map((p) => (
+                      <button
+                        key={p.id}
+                        className={(clip.inPreset || clip.preset) === p.id ? "style-tile on" : "style-tile"}
+                        onClick={() => {
+                          updateClip(clip.id, { inPreset: p.id as TextPreset, preset: p.id as TextPreset });
+                          pulseTitle(clip.id, clip.start);
+                        }}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="field">
+                    <label>In {(clip.inDur ?? 0.38).toFixed(2)}s</label>
+                    <input
+                      type="range"
+                      min={0.12}
+                      max={0.8}
+                      step={0.02}
+                      value={clip.inDur ?? 0.38}
+                      onChange={(e) => updateClip(clip.id, { inDur: +e.target.value })}
+                    />
+                  </div>
+                  <label className="micro">Out</label>
+                  <Chips
+                    value={(clip.outPreset || "fade") as OutPreset}
+                    opts={TITLE_OUTS}
+                    onChange={(v) => updateClip(clip.id, { outPreset: v })}
+                  />
+                  <div className="field">
+                    <label>Out {(clip.outDur ?? 0.28).toFixed(2)}s</label>
+                    <input
+                      type="range"
+                      min={0.12}
+                      max={0.8}
+                      step={0.02}
+                      value={clip.outDur ?? 0.28}
+                      onChange={(e) => updateClip(clip.id, { outDur: +e.target.value })}
+                    />
+                  </div>
+                </Section>
+                <Section title="Timing">
+                  <div className="row">
+                    <div className="field">
+                      <label>X {clip.x.toFixed(2)}</label>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={clip.x}
+                        onChange={(e) => updateClip(clip.id, { x: +e.target.value })}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Y {clip.y.toFixed(2)}</label>
+                      <input
+                        type="range"
+                        min={0.08}
+                        max={0.82}
+                        step={0.01}
+                        value={clip.y}
+                        onChange={(e) => updateClip(clip.id, { y: +e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </Section>
+              </>
             )}
+
+            {(clip.type === "video" || clip.type === "audio" || clip.type === "image") && (
+              <>
+                <Section title="Timing">
+                  <p className="hint">
+                    {clip.duration.toFixed(2)}s · in {clip.start.toFixed(2)}s
+                  </p>
+                  {clip.type !== "image" && (
+                    <div className="field">
+                      <label>Speed</label>
+                      <div className="chip-row">
+                        {SPEEDS.map((sp) => (
+                          <button
+                            key={sp}
+                            className={(clip.speed || 1) === sp ? "chip on" : "chip"}
+                            onClick={() => updateClip(clip.id, { speed: sp })}
+                          >
+                            {sp}×
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Section>
+                {clip.type === "video" && (
+                  <Section title="Look">
+                    <div className="field">
+                      <label>Transition in</label>
+                      <div className="chip-row">
+                        {TRANSITIONS.map((k) => (
+                          <button
+                            key={k}
+                            className={clip.transitionIn === k ? "chip on" : "chip"}
+                            onClick={() => setTransition(k as TransitionKind)}
+                          >
+                            {k}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="field">
+                      <label>Frames {clip.transitionFrames || 8}</label>
+                      <input
+                        type="range"
+                        min={4}
+                        max={16}
+                        step={1}
+                        value={clip.transitionFrames || 8}
+                        onChange={(e) => updateClip(clip.id, { transitionFrames: +e.target.value })}
+                      />
+                    </div>
+                  </Section>
+                )}
+                {clip.type !== "image" && (
+                  <Section title="Audio">
+                    <div className="field">
+                      <label>Volume {Math.round(clip.volume * 100)}%</label>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1.5}
+                        step={0.01}
+                        value={clip.volume}
+                        onChange={(e) => updateClip(clip.id, { volume: +e.target.value })}
+                      />
+                    </div>
+                    <div className="row">
+                      <div className="field">
+                        <label>Fade in</label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={2}
+                          step={0.05}
+                          value={clip.fadeIn}
+                          onChange={(e) => updateClip(clip.id, { fadeIn: +e.target.value })}
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Fade out</label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={2}
+                          step={0.05}
+                          value={clip.fadeOut}
+                          onChange={(e) => updateClip(clip.id, { fadeOut: +e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="field">
+                      <label>Ducking</label>
+                      <div className="seg">
+                        <button className={clip.role === "voice" ? "on" : ""} onClick={() => updateClip(clip.id, { role: "voice" })}>
+                          Voice
+                        </button>
+                        <button className={clip.role === "bgm" ? "on" : ""} onClick={() => updateClip(clip.id, { role: "bgm" })}>
+                          Music
+                        </button>
+                        <button className={clip.role === "none" ? "on" : ""} onClick={() => updateClip(clip.id, { role: "none" })}>
+                          Off
+                        </button>
+                      </div>
+                    </div>
+                    <p className="hint">Voice ducks music when both play.</p>
+                  </Section>
+                )}
+              </>
+            )}
+
             {clip.type === "shape" && (
               <div className="field">
                 <label>Fill</label>
                 <input type="text" value={clip.fill} onChange={(e) => updateClip(clip.id, { fill: e.target.value })} />
               </div>
             )}
-            <p className="hint">
-              {clip.duration.toFixed(2)}s · start {clip.start.toFixed(2)}s
-            </p>
           </>
         )}
       </div>
     </>
   );
 
-  if (embedded) return <div className="sheet">{body}</div>;
+  if (embedded)
+    return (
+      <div className="sheet">
+        <div className="sheet-handle" onClick={onClose} />
+        {body}
+      </div>
+    );
   return <aside className="inspector">{body}</aside>;
 }

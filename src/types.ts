@@ -1,10 +1,25 @@
 export type Aspect = "9:16" | "1:1" | "16:9";
 export type TrackKind = "video" | "overlay" | "audio" | "captions";
 export type ClipType = "video" | "image" | "audio" | "text" | "caption" | "shape";
-export type TextPreset = "fade" | "slide-up" | "pop" | "type-on";
-export type TransitionKind = "cut" | "fade" | "dissolve";
+export type TextPreset =
+  | "rise"
+  | "bloom"
+  | "fade"
+  | "type"
+  | "stamp"
+  | "drift"
+  | "split"
+  | "hold"
+  | "slide-up"
+  | "pop"
+  | "type-on";
+export type OutPreset = "fade" | "sink" | "scale" | "hold";
+export type TransitionKind = "cut" | "fade" | "dissolve" | "slide" | "wipe";
+export type CaptionStyle = "plate" | "stroke" | "karaoke" | "stack";
+export type TextFace = "fraunces" | "sora";
 export type ShapeKind = "rect" | "ellipse" | "star";
 export type AssetKind = "video" | "audio" | "image";
+export type BinTab = "media" | "titles" | "captions" | "trans";
 
 export const ASPECT_SIZE: Record<Aspect, { w: number; h: number }> = {
   "9:16": { w: 1080, h: 1920 },
@@ -14,6 +29,26 @@ export const ASPECT_SIZE: Record<Aspect, { w: number; h: number }> = {
 
 export const FPS = 30;
 export const TRANSITION_FRAMES = 8;
+export const SNAP = 0.12;
+export const TITLE_INS: { id: TextPreset; name: string }[] = [
+  { id: "rise", name: "Rise" },
+  { id: "bloom", name: "Bloom" },
+  { id: "fade", name: "Fade" },
+  { id: "type", name: "Type" },
+  { id: "stamp", name: "Stamp" },
+  { id: "drift", name: "Drift" },
+  { id: "split", name: "Split" },
+  { id: "hold", name: "Hold" },
+];
+export const TITLE_OUTS: { id: OutPreset; name: string }[] = [
+  { id: "fade", name: "Fade" },
+  { id: "sink", name: "Sink" },
+  { id: "scale", name: "Scale" },
+  { id: "hold", name: "Hold" },
+];
+export const TRANSITIONS: TransitionKind[] = ["cut", "fade", "dissolve", "slide", "wipe"];
+export const SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3];
+export const CAPTION_STYLES: CaptionStyle[] = ["plate", "stroke", "karaoke", "stack"];
 
 export interface AssetMeta {
   id: string;
@@ -24,6 +59,11 @@ export interface AssetMeta {
   width?: number;
   height?: number;
   hasAudio?: boolean;
+}
+
+export interface CaptionWord {
+  t: number;
+  w: string;
 }
 
 export interface Clip {
@@ -50,6 +90,15 @@ export interface Clip {
   y: number;
   scale: number;
   role: "voice" | "bgm" | "none";
+  captionStyle?: CaptionStyle;
+  captionWords?: CaptionWord[];
+  textFace?: TextFace;
+  inPreset?: TextPreset;
+  outPreset?: OutPreset;
+  inDur?: number;
+  outDur?: number;
+  speed?: number;
+  captionGroup?: boolean;
 }
 
 export interface Track {
@@ -66,6 +115,7 @@ export interface Project {
   fps: number;
   tracks: Track[];
   clips: Clip[];
+  magnetic?: boolean;
 }
 
 export function clipEnd(c: Clip): number {
@@ -99,10 +149,13 @@ export function emptyProject(): Project {
     fps: FPS,
     tracks: defaultTracks(),
     clips: [],
+    magnetic: true,
   };
 }
 
 export function blankClip(partial: Partial<Clip> & Pick<Clip, "trackId" | "type">): Clip {
+  const isCap = partial.type === "caption";
+  const isText = partial.type === "text";
   return {
     id: uid("cl"),
     assetId: undefined,
@@ -116,15 +169,42 @@ export function blankClip(partial: Partial<Clip> & Pick<Clip, "trackId" | "type"
     transitionIn: "cut",
     transitionFrames: TRANSITION_FRAMES,
     text: "",
-    preset: "fade",
-    fontSize: 72,
+    preset: isText ? "rise" : "fade",
+    fontSize: isText ? 92 : isCap ? 62 : 72,
     color: "#F0EFEC",
     shape: "rect",
     fill: "#D9CCAC",
     x: 0.5,
-    y: 0.5,
+    y: isCap ? 0.72 : isText ? 0.38 : 0.5,
     scale: 1,
     role: "none",
+    captionStyle: isCap ? "stroke" : undefined,
+    textFace: isText ? "fraunces" : "sora",
+    inPreset: isText ? "rise" : undefined,
+    outPreset: isText ? "fade" : undefined,
+    inDur: 0.38,
+    outDur: 0.28,
+    speed: 1,
+    captionGroup: true,
     ...partial,
   };
+}
+
+export function normalizeIn(p?: TextPreset): TextPreset {
+  if (p === "slide-up") return "rise";
+  if (p === "pop") return "bloom";
+  if (p === "type-on") return "type";
+  return p || "rise";
+}
+
+export function fmtTime(t: number) {
+  const s = Math.max(0, t);
+  const m = Math.floor(s / 60);
+  const r = s - m * 60;
+  return `${String(m).padStart(2, "0")}:${r.toFixed(2).padStart(5, "0")}`;
+}
+
+export function nextTransition(k: TransitionKind): TransitionKind {
+  const i = TRANSITIONS.indexOf(k);
+  return TRANSITIONS[(i + 1) % TRANSITIONS.length];
 }

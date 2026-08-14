@@ -140,6 +140,7 @@ export async function ingestFile(file: File, reuseId?: string): Promise<LoadedAs
     meta.height = img.naturalHeight;
     meta.duration = 4;
     media.images.set(id, img);
+    ensureThumb(id);
   } else if (kind === "audio") {
     const bunny = await probeWithBunny(file);
     if (bunny) {
@@ -170,6 +171,8 @@ export async function ingestFile(file: File, reuseId?: string): Promise<LoadedAs
     meta.hasAudio = bunny?.hasAudio ?? (v as HTMLVideoElement & { mozHasAudio?: boolean }).mozHasAudio !== false;
     v.muted = false;
     media.videos.set(id, v);
+    try { v.currentTime = Math.min(0.2, (v.duration || 1) * 0.05); } catch { /* */ }
+    v.addEventListener("seeked", () => { media.thumbCanvases.delete(id); ensureThumb(id); }, { once: true });
     if (bunny) {
       media.inputs.set(id, bunny.input);
       if (bunny.sink) media.sinks.set(id, bunny.sink);
@@ -185,8 +188,72 @@ export async function ingestFile(file: File, reuseId?: string): Promise<LoadedAs
   return meta;
 }
 
-export function sourceTime(clip: { trimIn: number; start: number }, t: number) {
-  return Math.max(0, clip.trimIn + (t - clip.start));
+export function sourceTime(clip: { trimIn: number; start: number; speed?: number }, t: number) {
+  const spd = clip.speed && clip.speed > 0 ? clip.speed : 1;
+  return Math.max(0, clip.trimIn + (t - clip.start) * spd);
+}
+
+export function coverDraw(
+  ctx: CanvasRenderingContext2D,
+  img: CanvasImageSource,
+  dw: number,
+  dh: number,
+) {
+  const iw =
+    (img as HTMLVideoElement).videoWidth ||
+    (img as HTMLImageElement).naturalWidth ||
+    (img as HTMLCanvasElement).width ||
+    dw;
+  const ih =
+    (img as HTMLVideoElement).videoHeight ||
+    (img as HTMLImageElement).naturalHeight ||
+    (img as HTMLCanvasElement).height ||
+    dh;
+  if (!iw || !ih) return;
+  const s = Math.max(dw / iw, dh / ih);
+  const sw = dw / s;
+  const sh = dh / s;
+  const sx = (iw - sw) / 2;
+  const sy = (ih - sh) / 2;
+  ctx.drawImage(img as CanvasImageSource, sx, sy, sw, sh, 0, 0, dw, dh);
+}
+
+export function ensureThumb(id: string): HTMLCanvasElement {
+  const hit = media.thumbCanvases.get(id);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = 64;
+  c.height = 48;
+  const ctx = c.getContext("2d")!;
+  const img = media.images.get(id);
+  const v = media.videos.get(id);
+  const src = img || (v && v.readyState >= 2 ? v : null);
+  if (src) coverDraw(ctx, src, 64, 48);
+  else {
+    const g = ctx.createLinearGradient(0, 0, 64, 48);
+    g.addColorStop(0, "#3a3428");
+    g.addColorStop(1, "#0D0F14");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 48);
+  }
+  media.thumbCanvases.set(id, c);
+  return c;
+}
+
+export function peaksFor(id: string, bins = 80): number[] | null {
+  const buf = media.audioBuffers.get(id);
+  if (!buf) return null;
+  const ch = buf.getChannelData(0);
+  const peaks = new Array(bins).fill(0);
+  const step = ch.length / bins;
+  for (let i = 0; i < bins; i++) {
+    let m = 0;
+    const a = Math.floor(i * step);
+    const b = Math.min(ch.length, Math.floor((i + 1) * step));
+    for (let j = a; j < b; j += 8) m = Math.max(m, Math.abs(ch[j]));
+    peaks[i] = m;
+  }
+  return peaks;
 }
 
 export async function frameForClip(

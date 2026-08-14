@@ -1,30 +1,28 @@
 import { useEffect, useRef } from "react";
-import { ASPECT_SIZE, FPS, projectDuration } from "../types";
+import { ASPECT_SIZE, fmtTime, projectDuration } from "../types";
 import { useEditor } from "../store";
 import { media } from "../engine/media";
 import { PreviewAudio } from "../engine/audio";
 import { renderFrame, visibleMediaClips, type FrameBank } from "../engine/render";
+import { IconPause, IconPlay, IconSplit, IconUndo } from "./icons";
 
 const audio = new PreviewAudio();
 
-function fmt(t: number) {
-  const s = Math.max(0, t);
-  const m = Math.floor(s / 60);
-  const r = s - m * 60;
-  return `${String(m).padStart(2, "0")}:${r.toFixed(2).padStart(5, "0")}`;
-}
-
-export function Preview() {
+export function Preview({ onExport }: { onExport?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const project = useEditor((s) => s.project);
   const playhead = useEditor((s) => s.playhead);
   const playing = useEditor((s) => s.playing);
+  const selectedId = useEditor((s) => s.selectedId);
   const setPlayhead = useEditor((s) => s.setPlayhead);
   const setPlaying = useEditor((s) => s.setPlaying);
   const splitAtPlayhead = useEditor((s) => s.splitAtPlayhead);
   const undo = useEditor((s) => s.undo);
   const size = ASPECT_SIZE[project.aspect];
   const dur = projectDuration(project);
+  const selected = project.clips.find((c) => c.id === selectedId);
+  const safeOn = selected?.type === "text" || selected?.type === "caption";
+  const vertical = size.h >= size.w;
 
   const paint = (t: number) => {
     const canvas = canvasRef.current;
@@ -66,9 +64,11 @@ export function Preview() {
       if (c.type !== "video" || !c.assetId) continue;
       const v = media.videos.get(c.assetId);
       if (!v) continue;
-      const st = c.trimIn + Math.max(0, t - c.start);
+      const spd = c.speed && c.speed > 0 ? c.speed : 1;
+      const st = c.trimIn + Math.max(0, t - c.start) * spd;
       v.currentTime = st;
       v.muted = true;
+      v.playbackRate = spd;
       v.play().catch(() => {});
     }
     const loop = (now: number) => {
@@ -94,48 +94,78 @@ export function Preview() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const ed = useEditor.getState();
       if (e.code === "Space") {
         e.preventDefault();
-        setPlaying(!useEditor.getState().playing);
+        setPlaying(!ed.playing);
       }
-      if (e.key === "s" || e.key === "S") splitAtPlayhead();
+      if (e.key === "s" || e.key === "S" || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b")) {
+        e.preventDefault();
+        splitAtPlayhead();
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        if (e.shiftKey) useEditor.getState().redo();
+        if (e.shiftKey) ed.redo();
         else undo();
       }
-      if (e.key === "Delete" || e.key === "Backspace") useEditor.getState().deleteSelected(e.shiftKey);
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        onExport?.();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        ed.duplicateSelected();
+      }
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        ed.deleteSelected(e.shiftKey);
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setPlayhead(ed.playhead - (e.shiftKey ? 1 : 1 / 30));
+        setPlaying(false);
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setPlayhead(ed.playhead + (e.shiftKey ? 1 : 1 / 30));
+        setPlaying(false);
+      }
+      if (e.key === "Home" || e.key === "0") {
+        if (e.key === "0" && (e.metaKey || e.ctrlKey)) return;
+        e.preventDefault();
+        setPlayhead(0);
+        setPlaying(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setPlaying, splitAtPlayhead, undo]);
-
-  const ratio = size.w / size.h;
+  }, [setPlaying, splitAtPlayhead, undo, setPlayhead, onExport]);
 
   return (
     <div className="preview-wrap">
-      <div className="stage-frame" style={{ aspectRatio: `${size.w} / ${size.h}`, width: ratio < 1 ? "min(100%, 42vh)" : "min(100%, 720px)" }}>
+      <div className="preview-stage"><div className="stage-frame" style={vertical ? { aspectRatio: `${size.w} / ${size.h}`, height: "100%", width: "auto", maxWidth: "100%" } : { aspectRatio: `${size.w} / ${size.h}`, width: "100%", height: "auto", maxHeight: "100%" }}>
         <canvas ref={canvasRef} width={size.w} height={size.h} />
-      </div>
+        {safeOn && (
+          <div className="safe-zone" aria-hidden>
+            <i className="safe-top" />
+            <i className="safe-bot" />
+          </div>
+        )}
+      </div></div>
       <div className="transport">
         <button className="icon-btn" onClick={undo} title="Undo">
-          ↺
+          <IconUndo />
         </button>
-        <button
-          className="icon-btn play"
-          onClick={() => setPlaying(!playing)}
-          title="Play"
-        >
-          {playing ? "❚❚" : "▶"}
+        <button className="icon-btn play" onClick={() => setPlaying(!playing)} title="Play">
+          {playing ? <IconPause /> : <IconPlay />}
         </button>
         <button className="icon-btn" onClick={splitAtPlayhead} title="Split">
-          ✂
+          <IconSplit />
         </button>
         <div className="tc">
-          {fmt(playhead)} / {fmt(dur)}
+          {fmtTime(playhead)} / {fmtTime(dur)}
         </div>
-        <span className="tc">{FPS} fps</span>
       </div>
     </div>
   );

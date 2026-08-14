@@ -9,5 +9,7 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     assetsInlineLimit: 4096,
+    chunkSizeWarningLimit: 1800,
+    target: "esnext",
   },
 });

@@ -1,12 +1,16 @@
 import { create } from "zustand";
 import {
+  SNAP,
   blankClip,
   clipEnd,
   emptyProject,
+  nextTransition,
   projectDuration,
   uid,
   type Aspect,
   type AssetMeta,
+  type BinTab,
+  type CaptionStyle,
   type Clip,
   type Project,
   type ShapeKind,
@@ -16,24 +20,25 @@ import {
 import { persistAsset, persistProject } from "./db";
 import { ingestFile, media } from "./engine/media";
 
-const SNAP = 0.12;
-
 function clone<T>(x: T): T {
   return JSON.parse(JSON.stringify(x));
 }
 
-function snapTime(t: number, others: number[], on: boolean) {
-  if (!on) return Math.max(0, t);
-  let best = Math.max(0, t);
+function snapTime(t: number, others: number[], on: boolean): { t: number; hit: number | null } {
+  const base = Math.max(0, t);
+  if (!on) return { t: base, hit: null };
+  let best = base;
   let d = SNAP;
+  let hit: number | null = null;
   for (const o of others) {
     const dd = Math.abs(o - t);
     if (dd < d) {
       d = dd;
       best = o;
+      hit = o;
     }
   }
-  return best;
+  return { t: Math.max(0, best), hit };
 }
 
 function others(p: Project, except?: string) {
@@ -45,6 +50,24 @@ function others(p: Project, except?: string) {
   return pts;
 }
 
+function packTrack(clips: Clip[], trackId: string): Clip[] {
+  const mine = clips
+    .filter((c) => c.trackId === trackId)
+    .sort((a, b) => a.start - b.start || a.id.localeCompare(b.id));
+  let t = 0;
+  const starts = new Map<string, number>();
+  for (const c of mine) {
+    starts.set(c.id, t);
+    t += c.duration;
+  }
+  return clips.map((c) => (starts.has(c.id) ? { ...c, start: starts.get(c.id)! } : c));
+}
+
+function maybePack(project: Project, trackId: string): Clip[] {
+  if (project.magnetic !== false && trackId === "trk_v1") return packTrack(project.clips, "trk_v1");
+  return project.clips;
+}
+
 type Editor = {
   project: Project;
   assets: Record<string, AssetMeta>;
@@ -53,31 +76,50 @@ type Editor = {
   selectedId: string | null;
   zoom: number;
   snap: boolean;
+  ripple: boolean;
   hydrating: boolean;
   past: Project[];
   future: Project[];
   toast: string | null;
+  snapGuide: number | null;
+  debug: boolean;
+  binTab: BinTab;
   push: () => void;
   undo: () => void;
   redo: () => void;
   setPlayhead: (t: number) => void;
   setPlaying: (v: boolean) => void;
   setZoom: (z: number) => void;
+  fitZoom: (lanePx: number) => void;
   setAspect: (a: Aspect) => void;
   select: (id: string | null) => void;
+  setSnap: (v: boolean) => void;
+  setRipple: (v: boolean) => void;
+  setMagnetic: (v: boolean) => void;
+  setBinTab: (t: BinTab) => void;
+  setDebug: (v: boolean) => void;
+  setSnapGuide: (t: number | null) => void;
   importFiles: (files: File[]) => Promise<void>;
+  dropAsset: (assetId: string, trackId: string, time: number) => void;
   addText: (preset?: TextPreset) => void;
   addCaption: (text?: string) => void;
   addShape: (shape?: ShapeKind) => void;
   addCaptions: (clips: Clip[]) => void;
+  replaceCaptions: (ranges: { start: number; end: number }[], clips: Clip[]) => void;
+  styleAllCaptions: (style: CaptionStyle) => void;
   updateClip: (id: string, patch: Partial<Clip>) => void;
-  moveClip: (id: string, start: number) => void;
+  moveClip: (id: string, start: number, packing?: boolean) => void;
   trimClip: (id: string, edge: "in" | "out", t: number) => void;
+  finishEdit: () => void;
   splitAtPlayhead: () => void;
   deleteSelected: (ripple?: boolean) => void;
-  setTransition: (kind: TransitionKind) => void;
+  duplicateSelected: () => void;
+  setTransition: (kind: TransitionKind, clipId?: string) => void;
+  cycleTransition: (clipId: string) => void;
   hydrate: (p: Project, assets: AssetMeta[]) => void;
   setToast: (t: string | null) => void;
+  mergeCaptionWithNext: () => void;
+  splitCaptionAt: (index: number) => void;
 };
 
 let persistTimer: number | undefined;
@@ -94,10 +136,14 @@ export const useEditor = create<Editor>((set, get) => ({
   selectedId: null,
   zoom: 80,
   snap: true,
+  ripple: false,
   hydrating: true,
   past: [],
   future: [],
   toast: null,
+  snapGuide: null,
+  debug: typeof window !== "undefined" && /(?:\?|&)debug=1/.test(window.location.search),
+  binTab: "media",
 
   push() {
     const { project, past } = get();
@@ -137,6 +183,11 @@ export const useEditor = create<Editor>((set, get) => ({
   setZoom(z) {
     set({ zoom: Math.max(28, Math.min(240, z)) });
   },
+  fitZoom(lanePx) {
+    const d = projectDuration(get().project) + 1;
+    const z = Math.max(28, Math.min(240, lanePx / Math.max(1, d)));
+    set({ zoom: z });
+  },
   setAspect(a) {
     get().push();
     const project = { ...get().project, aspect: a };
@@ -146,19 +197,52 @@ export const useEditor = create<Editor>((set, get) => ({
   select(id) {
     set({ selectedId: id });
   },
+  setSnap(v) {
+    set({ snap: v });
+  },
+  setRipple(v) {
+    set({ ripple: v });
+  },
+  setMagnetic(v) {
+    get().push();
+    let clips = get().project.clips;
+    const project = { ...get().project, magnetic: v, clips: v ? packTrack(clips, "trk_v1") : clips };
+    set({ project });
+    schedulePersist(project);
+  },
+  setBinTab(t) {
+    set({ binTab: t });
+  },
+  setDebug(v) {
+    set({ debug: v });
+  },
+  setSnapGuide(t) {
+    set({ snapGuide: t });
+  },
 
   async importFiles(files) {
     get().push();
     const project = clone(get().project);
     const assets = { ...get().assets };
-    let tVideo = Math.max(0, ...project.clips.filter((c) => c.trackId === "trk_v1").map(clipEnd));
-    let tAudio = Math.max(0, ...project.clips.filter((c) => c.trackId === "trk_a1").map(clipEnd));
-    let tOv = Math.max(0, ...project.clips.filter((c) => c.trackId === "trk_ov").map(clipEnd));
+    let tVideo = Math.max(0, ...project.clips.filter((c) => c.trackId === "trk_v1").map(clipEnd), 0);
+    let tAudio = Math.max(0, ...project.clips.filter((c) => c.trackId === "trk_a1").map(clipEnd), 0);
     for (const file of files) {
       try {
         const meta = await ingestFile(file);
         assets[meta.id] = meta;
-        await persistAsset({ id: meta.id, kind: meta.kind, name: meta.name, mime: meta.mime, duration: meta.duration, width: meta.width, height: meta.height, hasAudio: meta.hasAudio }, file);
+        await persistAsset(
+          {
+            id: meta.id,
+            kind: meta.kind,
+            name: meta.name,
+            mime: meta.mime,
+            duration: meta.duration,
+            width: meta.width,
+            height: meta.height,
+            hasAudio: meta.hasAudio,
+          },
+          file,
+        );
         if (meta.kind === "audio") {
           project.clips.push(
             blankClip({
@@ -208,15 +292,63 @@ export const useEditor = create<Editor>((set, get) => ({
           tVideo += meta.duration || 2;
         }
       } catch (e) {
-        set({ toast: `Could not import ${file.name}` });
+        set({ toast: "Could not read that file in this browser." });
         console.error(e);
       }
     }
+    if (project.magnetic !== false) project.clips = packTrack(project.clips, "trk_v1");
     set({ project, assets, hydrating: false });
     schedulePersist(project);
   },
 
-  addText(preset = "slide-up") {
+  dropAsset(assetId, trackId, time) {
+    const meta = get().assets[assetId];
+    if (!meta) return;
+    get().push();
+    const project = clone(get().project);
+    const { t } = snapTime(time, others(project), get().snap);
+    let clip: Clip;
+    if (meta.kind === "audio") {
+      clip = blankClip({
+        trackId: trackId === "trk_a1" ? "trk_a1" : "trk_a1",
+        type: "audio",
+        assetId,
+        start: t,
+        duration: meta.duration || 4,
+        sourceDuration: meta.duration || 4,
+        role: "bgm",
+        volume: 0.7,
+      });
+    } else if (meta.kind === "image") {
+      const onOv = trackId === "trk_ov";
+      clip = blankClip({
+        trackId: onOv ? "trk_ov" : "trk_v1",
+        type: "image",
+        assetId,
+        start: t,
+        duration: 3.2,
+        sourceDuration: 3.2,
+        y: onOv ? 0.5 : 0.5,
+        scale: onOv ? 0.85 : 1,
+      });
+    } else {
+      clip = blankClip({
+        trackId: trackId === "trk_ov" ? "trk_ov" : "trk_v1",
+        type: "video",
+        assetId,
+        start: t,
+        duration: meta.duration || 2,
+        sourceDuration: meta.duration || 2,
+        role: "voice",
+      });
+    }
+    project.clips.push(clip);
+    project.clips = maybePack(project, clip.trackId);
+    set({ project, selectedId: clip.id, snapGuide: null });
+    schedulePersist(project);
+  },
+
+  addText(preset = "rise") {
     get().push();
     const { project, playhead } = get();
     const clip = blankClip({
@@ -226,11 +358,14 @@ export const useEditor = create<Editor>((set, get) => ({
       duration: 2.8,
       text: "BESTCUT",
       preset,
+      inPreset: preset,
       y: 0.38,
       fontSize: 92,
+      textFace: "fraunces",
     });
     const next = { ...project, clips: [...project.clips, clip] };
-    set({ project: next, selectedId: clip.id });
+    set({ project: next, selectedId: clip.id, playhead, playing: true });
+    window.setTimeout(() => useEditor.getState().setPlaying(false), 1200);
     schedulePersist(next);
   },
   addCaption(text = "Add a caption") {
@@ -242,6 +377,8 @@ export const useEditor = create<Editor>((set, get) => ({
       start: playhead,
       duration: 2.2,
       text,
+      captionStyle: "stroke",
+      y: 0.72,
     });
     const next = { ...project, clips: [...project.clips, clip] };
     set({ project: next, selectedId: clip.id });
@@ -265,8 +402,41 @@ export const useEditor = create<Editor>((set, get) => ({
   },
   addCaptions(clips) {
     get().push();
-    const project = { ...get().project, clips: [...get().project.clips, ...clips] };
-    set({ project, selectedId: clips[0]?.id ?? get().selectedId });
+    const styled = clips.map((c) => ({
+      ...c,
+      captionStyle: c.captionStyle || "stroke",
+      y: c.y || 0.72,
+      captionGroup: true,
+    }));
+    const project = { ...get().project, clips: [...get().project.clips, ...styled] };
+    set({ project, selectedId: styled[0]?.id ?? get().selectedId });
+    schedulePersist(project);
+  },
+  replaceCaptions(ranges, clips) {
+    get().push();
+    const keep = get().project.clips.filter((c) => {
+      if (c.type !== "caption") return true;
+      return !ranges.some((r) => c.start < r.end && clipEnd(c) > r.start);
+    });
+    const styled = clips.map((c) => ({
+      ...c,
+      captionStyle: c.captionStyle || "stroke",
+      y: c.y || 0.72,
+      captionGroup: true,
+    }));
+    const project = { ...get().project, clips: [...keep, ...styled] };
+    set({ project, selectedId: styled[0]?.id ?? null });
+    schedulePersist(project);
+  },
+  styleAllCaptions(style) {
+    get().push();
+    const project = {
+      ...get().project,
+      clips: get().project.clips.map((c) =>
+        c.type === "caption" && c.captionGroup !== false ? { ...c, captionStyle: style } : c,
+      ),
+    };
+    set({ project });
     schedulePersist(project);
   },
   updateClip(id, patch) {
@@ -278,92 +448,185 @@ export const useEditor = create<Editor>((set, get) => ({
     set({ project });
     schedulePersist(project);
   },
-  moveClip(id, start) {
+  moveClip(id, start, packing = false) {
     const { project, snap } = get();
     const c = project.clips.find((x) => x.id === id);
     if (!c) return;
-    const t = snapTime(start, others(project, id), snap);
-    const next = {
-      ...project,
-      clips: project.clips.map((x) => (x.id === id ? { ...x, start: Math.max(0, t) } : x)),
-    };
-    set({ project: next });
-    schedulePersist(next);
+    const pts = others(project, id);
+    pts.push(get().playhead);
+    const { t, hit } = snapTime(start, pts, snap);
+    let clips = project.clips.map((x) => (x.id === id ? { ...x, start: Math.max(0, t) } : x));
+    if (packing) clips = maybePack({ ...project, clips }, c.trackId);
+    set({ project: { ...project, clips }, snapGuide: hit, playhead: get().playing ? get().playhead : get().playhead });
+    schedulePersist({ ...project, clips });
   },
   trimClip(id, edge, t) {
-    const { project, snap } = get();
+    const { project, snap, ripple } = get();
     const c = project.clips.find((x) => x.id === id);
     if (!c) return;
-    const st = snapTime(t, others(project, id), snap);
+    const pts = others(project, id);
+    pts.push(get().playhead);
+    const { t: st, hit } = snapTime(t, pts, snap);
     let nextC = { ...c };
     if (edge === "in") {
       const newStart = Math.max(0, Math.min(st, clipEnd(c) - 0.12));
       const delta = newStart - c.start;
+      const newTrim = Math.max(0, c.trimIn + delta);
+      if (c.sourceDuration && newTrim >= c.sourceDuration - 0.12) return;
       nextC.start = newStart;
-      nextC.trimIn = Math.max(0, c.trimIn + delta);
+      nextC.trimIn = newTrim;
       nextC.duration = Math.max(0.12, c.duration - delta);
     } else {
       nextC.duration = Math.max(0.12, st - c.start);
       if (c.sourceDuration) nextC.duration = Math.min(nextC.duration, c.sourceDuration - c.trimIn);
     }
-    const next = { ...project, clips: project.clips.map((x) => (x.id === id ? nextC : x)) };
-    set({ project: next });
+    let clips = project.clips.map((x) => (x.id === id ? nextC : x));
+    if (ripple || (project.magnetic !== false && c.trackId === "trk_v1")) {
+      if (edge === "in" && ripple && c.trackId !== "trk_v1") {
+        const delta = nextC.start - c.start;
+        clips = clips.map((x) =>
+          x.trackId === c.trackId && x.id !== id && x.start >= c.start ? { ...x, start: Math.max(0, x.start + delta) } : x,
+        );
+      }
+    }
+    set({
+      project: { ...project, clips },
+      snapGuide: hit,
+      playhead: edge === "in" ? nextC.start : nextC.start + nextC.duration,
+      playing: false,
+    });
+    schedulePersist({ ...project, clips });
+  },
+  finishEdit() {
+    const { project } = get();
+    const clips = maybePack(project, "trk_v1");
+    const next = { ...project, clips };
+    set({ project: next, snapGuide: null });
     schedulePersist(next);
   },
   splitAtPlayhead() {
-    const { project, playhead } = get();
-    const hit = project.clips.find((c) => playhead > c.start + 0.08 && playhead < clipEnd(c) - 0.08);
-    if (!hit) return;
+    const { project, playhead, selectedId } = get();
+    const hits = project.clips.filter((c) => playhead > c.start + 0.08 && playhead < clipEnd(c) - 0.08);
+    if (!hits.length) return;
+    const selected = hits.find((c) => c.id === selectedId);
+    const targets = selected ? [selected] : hits;
     get().push();
-    const lt = playhead - hit.start;
-    const left = { ...hit, duration: lt };
-    const right = {
-      ...hit,
-      id: uid("cl"),
-      start: playhead,
-      duration: hit.duration - lt,
-      trimIn: hit.trimIn + lt,
-    };
-    const next = {
-      ...project,
-      clips: project.clips.flatMap((c) => (c.id === hit.id ? [left, right] : [c])),
-    };
-    set({ project: next, selectedId: right.id });
+    let clips = project.clips;
+    let selectId = selectedId;
+    for (const hit of targets) {
+      const lt = playhead - hit.start;
+      const left = { ...hit, duration: lt };
+      const right = {
+        ...hit,
+        id: uid("cl"),
+        start: playhead,
+        duration: hit.duration - lt,
+        trimIn: hit.trimIn + lt,
+        transitionIn: "cut" as TransitionKind,
+      };
+      clips = clips.flatMap((c) => (c.id === hit.id ? [left, right] : [c]));
+      selectId = right.id;
+    }
+    const next = { ...project, clips };
+    set({ project: next, selectedId: selectId });
     schedulePersist(next);
   },
-  deleteSelected(ripple = false) {
-    const { project, selectedId } = get();
+  deleteSelected(rippleArg) {
+    const { project, selectedId, ripple } = get();
     if (!selectedId) return;
     const clip = project.clips.find((c) => c.id === selectedId);
     if (!clip) return;
     get().push();
     let clips = project.clips.filter((c) => c.id !== selectedId);
-    if (ripple) {
+    const doRipple = rippleArg ?? ripple ?? false;
+    const magneticVid = project.magnetic !== false && clip.trackId === "trk_v1";
+    if (doRipple || magneticVid) {
       clips = clips.map((c) =>
         c.trackId === clip.trackId && c.start >= clipEnd(clip)
           ? { ...c, start: Math.max(0, c.start - clip.duration) }
           : c,
       );
     }
+    if (magneticVid) clips = packTrack(clips, "trk_v1");
     const next = { ...project, clips };
     set({ project: next, selectedId: null });
     schedulePersist(next);
   },
-  setTransition(kind) {
-    const { selectedId } = get();
+  duplicateSelected() {
+    const { project, selectedId } = get();
     if (!selectedId) return;
-    get().updateClip(selectedId, { transitionIn: kind });
+    const clip = project.clips.find((c) => c.id === selectedId);
+    if (!clip) return;
+    get().push();
+    const copy = { ...clone(clip), id: uid("cl"), start: clipEnd(clip) };
+    let clips = [...project.clips, copy];
+    clips = maybePack({ ...project, clips }, copy.trackId);
+    const next = { ...project, clips };
+    set({ project: next, selectedId: copy.id });
+    schedulePersist(next);
+  },
+  setTransition(kind, clipId) {
+    const id = clipId || get().selectedId;
+    if (!id) return;
+    get().updateClip(id, { transitionIn: kind });
+  },
+  cycleTransition(clipId) {
+    const c = get().project.clips.find((x) => x.id === clipId);
+    if (!c) return;
+    get().updateClip(clipId, { transitionIn: nextTransition(c.transitionIn) });
   },
   hydrate(p, assets) {
     const map: Record<string, AssetMeta> = {};
     for (const a of assets) map[a.id] = a;
-    set({ project: p, assets: map, hydrating: false });
+    const project: Project = {
+      ...p,
+      magnetic: p.magnetic !== false,
+      tracks: p.tracks?.length ? p.tracks : emptyProject().tracks,
+    };
+    set({ project, assets: map, hydrating: false });
   },
   setToast(t) {
     set({ toast: t });
-    if (t) window.setTimeout(() => {
-      if (get().toast === t) set({ toast: null });
-    }, 3200);
+    if (t)
+      window.setTimeout(() => {
+        if (get().toast === t) set({ toast: null });
+      }, 3200);
+  },
+  mergeCaptionWithNext() {
+    const { project, selectedId } = get();
+    if (!selectedId) return;
+    const list = project.clips.filter((c) => c.type === "caption").sort((a, b) => a.start - b.start);
+    const i = list.findIndex((c) => c.id === selectedId);
+    if (i < 0 || i === list.length - 1) return;
+    const a = list[i];
+    const b = list[i + 1];
+    get().push();
+    const merged = {
+      ...a,
+      text: `${a.text} ${b.text}`.trim(),
+      duration: clipEnd(b) - a.start,
+    };
+    const clips = project.clips.filter((c) => c.id !== b.id).map((c) => (c.id === a.id ? merged : c));
+    const next = { ...project, clips };
+    set({ project: next });
+    schedulePersist(next);
+  },
+  splitCaptionAt(index) {
+    const { project, selectedId } = get();
+    if (!selectedId) return;
+    const c = project.clips.find((x) => x.id === selectedId);
+    if (!c || c.type !== "caption") return;
+    const left = c.text.slice(0, index).trim();
+    const right = c.text.slice(index).trim();
+    if (!left || !right) return;
+    get().push();
+    const mid = c.start + c.duration * (left.length / c.text.length);
+    const a = { ...c, text: left, duration: mid - c.start };
+    const b = { ...c, id: uid("cl"), text: right, start: mid, duration: clipEnd(c) - mid };
+    const clips = project.clips.flatMap((x) => (x.id === c.id ? [a, b] : [x]));
+    const next = { ...project, clips };
+    set({ project: next, selectedId: b.id });
+    schedulePersist(next);
   },
 }));
 

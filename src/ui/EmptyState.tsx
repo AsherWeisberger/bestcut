@@ -31,8 +31,7 @@ export function EmptyState() {
             Cut it <em>here.</em>
           </h1>
           <p className="lead">
-            A CapCut-class editor that never phones home. Drop a clip, split the miss, title it, caption it, export 9:16.
-            Bytes stay in this browser.
+            A local editor for 9:16. Split the miss, title it, caption it, export. Bytes stay in this browser.
           </p>
           <div
             className={`drop ${hot ? "hot" : ""}`}
@@ -71,7 +70,7 @@ export function EmptyState() {
             </div>
             <div>
               <b>02</b>
-              <span>Split · title · caption</span>
+              <span>Split · title · auto caption</span>
             </div>
             <div>
               <b>03</b>
