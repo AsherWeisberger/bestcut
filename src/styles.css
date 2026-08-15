@@ -40,9 +40,18 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   height: 48px; display: flex; align-items: center; gap: 12px;
   padding: 0 14px; border-bottom: 1px solid var(--line); flex-shrink: 0;
 }
+.brand-col {
+  display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0;
+}
 .mark {
   display: flex; align-items: center; gap: 9px; text-decoration: none; color: var(--paper);
 }
+.byline {
+  font-size: 10px; color: var(--fog); text-decoration: none; letter-spacing: 0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: min(220px, 42vw);
+}
+.byline:hover { color: var(--sand); }
+.byline .who { color: var(--mute); }
 .mark svg { display: block; }
 .word {
   font-family: var(--display); font-weight: 560; font-size: 18px; letter-spacing: -0.03em;
@@ -403,6 +412,11 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 .steps div { border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
 .steps b { display: block; font-family: var(--display); font-size: 22px; font-weight: 400; color: var(--sand); }
 .steps span { color: var(--fog); font-size: 12px; }
+.empty .credit {
+  margin: 18px 0 0; color: var(--mute); font-size: 12px; letter-spacing: 0.01em;
+}
+.empty .credit a { color: var(--fog); text-decoration: none; }
+.empty .credit a:hover { color: var(--sand); }
 
 .toast {
   position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%);
@@ -421,6 +435,8 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 @media (max-width: 959px) {
   .desk-only { display: none; }
   .topbar { gap: 8px; padding: 0 10px; height: 48px; overflow: hidden; }
+  .byline .who { display: none; }
+  .byline { max-width: 140px; }
   .seg button { padding: 5px 8px; font-size: 10px; }
   .cta { padding: 7px 11px; font-size: 12px; }
   .word { font-size: 16px; }

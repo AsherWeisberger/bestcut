@@ -221,7 +221,12 @@ export function Editor() {
       }}
     >
       <header className="topbar">
-        <Mark onLong={() => setDebug(true)} />
+        <div className="brand-col">
+          <Mark onLong={() => setDebug(true)} />
+          <a className="byline" href="https://x.com/AsherWeisberger" rel="noopener noreferrer">
+            <span className="who">Made by Asher Weisberger · </span>@AsherWeisberger
+          </a>
+        </div>
         <div className="top-spacer" />
         <div className="seg" role="tablist" aria-label="Aspect">
           {(["9:16", "1:1", "16:9"] as const).map((a) => (

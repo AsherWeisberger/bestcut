@@ -4,6 +4,8 @@ In-browser video editor. Phone-first. Bytes never leave the tab.
 
 Live: https://asherweisberger.github.io/bestcut/
 
+Made by [Asher Weisberger](https://x.com/AsherWeisberger) ([@AsherWeisberger](https://x.com/AsherWeisberger))
+
 MIT. Original implementation. Vite + React + TypeScript. Canvas 2D + WebCodecs + Mediabunny.
 
 ## Why
@@ -22,3 +24,7 @@ CapCut paywalls basics. OpenCut still ships a backend classic and blocks phones.
 Vite + React + TypeScript. Canvas 2D. WebCodecs + Mediabunny. Zustand. Dexie. ffmpeg.wasm is not bundled.
 
 ## Develop
+
+## License
+
+MIT. Copyright 2026 Asher Weisberger ([@AsherWeisberger](https://x.com/AsherWeisberger)).

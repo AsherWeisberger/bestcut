@@ -15,14 +15,19 @@ export function EmptyState() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="mark">
-          <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
-            <rect x="5" y="7" width="22" height="18" rx="2" stroke="#D9CCAC" strokeWidth="1.6" />
-            <path d="M13 12.2v7.6L20.4 16 13 12.2z" fill="#D9CCAC" />
-          </svg>
-          <span className="word">
-            Best<i>Cut</i>
-          </span>
+        <div className="brand-col">
+          <div className="mark">
+            <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+              <rect x="5" y="7" width="22" height="18" rx="2" stroke="#D9CCAC" strokeWidth="1.6" />
+              <path d="M13 12.2v7.6L20.4 16 13 12.2z" fill="#D9CCAC" />
+            </svg>
+            <span className="word">
+              Best<i>Cut</i>
+            </span>
+          </div>
+          <a className="byline" href="https://x.com/AsherWeisberger" rel="noopener noreferrer">
+            <span className="who">Made by Asher Weisberger · </span>@AsherWeisberger
+          </a>
         </div>
       </header>
       <div className="empty">
@@ -78,6 +83,12 @@ export function EmptyState() {
               <span>Export MP4 that plays</span>
             </div>
           </div>
+          <p className="credit">
+            Made by Asher Weisberger ·{" "}
+            <a href="https://x.com/AsherWeisberger" rel="noopener noreferrer">
+              @AsherWeisberger
+            </a>
+          </p>
         </div>
       </div>
     </div>

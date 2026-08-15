@@ -1,6 +1,7 @@
 {
   "name": "bestcut",
   "private": true,
+  "author": "Asher Weisberger (@AsherWeisberger)",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
