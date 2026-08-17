@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import {
-  SNAP,
   blankClip,
   clipEnd,
   clipSpeed,
@@ -21,26 +20,10 @@ import {
 import { persistAsset, persistProject } from "./db";
 import { ingestFile, media } from "./engine/media";
 import { rangeSpeedPieces, replaceClipWithPieces, setClipSpeedResult } from "./engine/speed";
+import { snapTime } from "./engine/snap";
 
 function clone<T>(x: T): T {
   return JSON.parse(JSON.stringify(x));
-}
-
-function snapTime(t: number, others: number[], on: boolean): { t: number; hit: number | null } {
-  const base = Math.max(0, t);
-  if (!on) return { t: base, hit: null };
-  let best = base;
-  let d = SNAP;
-  let hit: number | null = null;
-  for (const o of others) {
-    const dd = Math.abs(o - t);
-    if (dd < d) {
-      d = dd;
-      best = o;
-      hit = o;
-    }
-  }
-  return { t: Math.max(0, best), hit };
 }
 
 function others(p: Project, except?: string) {
@@ -112,8 +95,8 @@ type Editor = {
   replaceCaptions: (ranges: { start: number; end: number }[], clips: Clip[]) => void;
   styleAllCaptions: (style: CaptionStyle) => void;
   updateClip: (id: string, patch: Partial<Clip>) => void;
-  moveClip: (id: string, start: number, packing?: boolean) => void;
-  trimClip: (id: string, edge: "in" | "out", t: number) => void;
+  moveClip: (id: string, start: number, meta?: { origin?: number; playhead?: number }) => void;
+  trimClip: (id: string, edge: "in" | "out", t: number, meta?: { origin?: number; playhead?: number }) => void;
   finishEdit: () => void;
   splitAtPlayhead: () => void;
   deleteSelected: (ripple?: boolean) => void;
@@ -134,6 +117,7 @@ type Editor = {
 
 let persistTimer: number | undefined;
 function schedulePersist(p: Project) {
+  if (typeof window === "undefined") return;
   window.clearTimeout(persistTimer);
   persistTimer = window.setTimeout(() => persistProject(p), 400);
 }
@@ -245,8 +229,7 @@ export const useEditor = create<Editor>((set, get) => ({
   },
   setMagnetic(v) {
     get().push();
-    let clips = get().project.clips;
-    const project = { ...get().project, magnetic: v, clips: v ? packTrack(clips, "trk_v1") : clips };
+    const project = { ...get().project, magnetic: v };
     set({ project });
     schedulePersist(project);
   },
@@ -347,7 +330,11 @@ export const useEditor = create<Editor>((set, get) => ({
     if (!meta) return;
     get().push();
     const project = clone(get().project);
-    const { t } = snapTime(time, others(project), get().snap);
+    const mag = project.magnetic !== false;
+    const { t } = snapTime(time, others(project), get().snap || mag, {
+      zoom: get().zoom,
+      mag,
+    });
     let clip: Clip;
     if (meta.kind === "audio") {
       clip = blankClip({
@@ -384,7 +371,6 @@ export const useEditor = create<Editor>((set, get) => ({
       });
     }
     project.clips.push(clip);
-    project.clips = maybePack(project, clip.trackId);
     set({ project, selectedId: clip.id, snapGuide: null });
     schedulePersist(project);
   },
@@ -492,25 +478,31 @@ export const useEditor = create<Editor>((set, get) => ({
     set({ project });
     schedulePersist(project);
   },
-  moveClip(id, start, packing = false) {
-    const { project, snap } = get();
+  moveClip(id, start, meta) {
+    const { project, snap, zoom } = get();
     const c = project.clips.find((x) => x.id === id);
     if (!c) return;
+    const mag = project.magnetic !== false;
     const pts = others(project, id);
-    pts.push(get().playhead);
-    const { t, hit } = snapTime(start, pts, snap);
-    let clips = project.clips.map((x) => (x.id === id ? { ...x, start: Math.max(0, t) } : x));
-    if (packing) clips = maybePack({ ...project, clips }, c.trackId);
-    set({ project: { ...project, clips }, snapGuide: hit, playhead: get().playing ? get().playhead : get().playhead });
+    pts.push(meta?.playhead ?? get().playhead);
+    const { t, hit } = snapTime(start, pts, snap || mag, {
+      zoom,
+      mag,
+      origin: meta?.origin ?? c.start,
+    });
+    const clips = project.clips.map((x) => (x.id === id ? { ...x, start: Math.max(0, t) } : x));
+    set({ project: { ...project, clips }, snapGuide: hit });
     schedulePersist({ ...project, clips });
   },
-  trimClip(id, edge, t) {
-    const { project, snap, ripple } = get();
+  trimClip(id, edge, t, meta) {
+    const { project, snap, ripple, zoom } = get();
     const c = project.clips.find((x) => x.id === id);
     if (!c) return;
+    const mag = project.magnetic !== false;
     const pts = others(project, id);
-    pts.push(get().playhead);
-    const { t: st, hit } = snapTime(t, pts, snap);
+    pts.push(meta?.playhead ?? get().playhead);
+    const origin = meta?.origin ?? (edge === "in" ? c.start : c.start + c.duration);
+    const { t: st, hit } = snapTime(t, pts, snap || mag, { zoom, mag, origin });
     let nextC = { ...c };
     const spd = clipSpeed(c);
     if (edge === "in") {
@@ -543,11 +535,7 @@ export const useEditor = create<Editor>((set, get) => ({
     schedulePersist({ ...project, clips });
   },
   finishEdit() {
-    const { project } = get();
-    const clips = maybePack(project, "trk_v1");
-    const next = { ...project, clips };
-    set({ project: next, snapGuide: null });
-    schedulePersist(next);
+    set({ snapGuide: null });
   },
   splitAtPlayhead() {
     const { project, playhead, selectedId } = get();

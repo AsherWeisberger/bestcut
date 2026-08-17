@@ -111,12 +111,18 @@ export function Timeline() {
     originX: number;
     originStart: number;
     originDur: number;
+    originPlayhead: number;
+    grabOffset: number;
     alt?: boolean;
     bandA?: number;
   } | null>(null);
   const laneRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinch = useRef<{ dist: number; zoom: number } | null>(null);
+  const holdX = useRef(0);
+  const autoRaf = useRef(0);
+  const applyDragRef = useRef<(x: number) => void>(() => {});
+  const tickAutoRef = useRef<() => void>(() => {});
   const labW = typeof window !== "undefined" && window.matchMedia("(max-width: 959px)").matches ? 48 : 56;
 
   const timeFromX = (clientX: number) => {
@@ -126,23 +132,71 @@ export function Timeline() {
     return Math.max(0, x / zoom);
   };
 
+  const applyDrag = (clientX: number) => {
+    const d = drag.current;
+    if (!d) return;
+    const meta = { origin: d.originStart, playhead: d.originPlayhead };
+    if (d.mode === "move") moveClip(d.id, timeFromX(clientX) - d.grabOffset, meta);
+    else if (d.mode === "in") trimClip(d.id, "in", timeFromX(clientX), { ...meta, origin: d.originStart });
+    else if (d.mode === "out") trimClip(d.id, "out", timeFromX(clientX), { ...meta, origin: d.originStart + d.originDur });
+    else {
+      const c = useEditor.getState().project.clips.find((x) => x.id === d.id);
+      if (!c) return;
+      const t = Math.max(c.start, Math.min(timeFromX(clientX), clipEnd(c)));
+      if (d.mode === "band") setSpeedMarks(d.bandA ?? t, t);
+      else if (d.mode === "band-in") setSpeedMarks(t, speedMarkOut ?? clipEnd(c));
+      else setSpeedMarks(speedMarkIn ?? c.start, t);
+    }
+  };
+
+  const stopAuto = () => {
+    if (autoRaf.current) cancelAnimationFrame(autoRaf.current);
+    autoRaf.current = 0;
+  };
+
+  const tickAuto = () => {
+    const d = drag.current;
+    const sc = scrollRef.current;
+    if (!d || !sc) {
+      stopAuto();
+      return;
+    }
+    const r = sc.getBoundingClientRect();
+    const x = holdX.current;
+    const zone = 72;
+    let dx = 0;
+    if (x < r.left + zone) dx = -Math.max(10, Math.round((zone - (x - r.left)) * 0.55));
+    else if (x > r.right - 48) dx = Math.max(10, Math.round((x - (r.right - 48)) * 0.55));
+    if (!dx) {
+      autoRaf.current = 0;
+      return;
+    }
+    sc.scrollLeft = Math.max(0, sc.scrollLeft + dx);
+    applyDragRef.current(x);
+    autoRaf.current = requestAnimationFrame(() => tickAutoRef.current());
+  };
+
   const onPointer = (e: React.PointerEvent, id: string, mode: "move" | "in" | "out" | "band" | "band-in" | "band-out") => {
     e.stopPropagation();
+    e.preventDefault();
     const c = project.clips.find((x) => x.id === id);
     if (!c) return;
     select(id);
     if (mode === "move" || mode === "in" || mode === "out") push();
+    const t0 = timeFromX(e.clientX);
     drag.current = {
       id,
       mode,
       originX: e.clientX,
       originStart: c.start,
       originDur: c.duration,
+      originPlayhead: useEditor.getState().playhead,
+      grabOffset: t0 - c.start,
       alt: e.altKey,
     };
+    holdX.current = e.clientX;
     if (mode === "band") {
-      const t = timeFromX(e.clientX);
-      const tClip = Math.max(c.start, Math.min(t, clipEnd(c)));
+      const tClip = Math.max(c.start, Math.min(t0, clipEnd(c)));
       drag.current.bandA = tClip;
       setSpeedMarks(tClip, tClip);
     }
@@ -150,26 +204,43 @@ export function Timeline() {
   };
 
   const onMove = (e: React.PointerEvent) => {
-    const d = drag.current;
-    if (!d) return;
-    const dt = (e.clientX - d.originX) / zoom;
-    if (d.mode === "move") moveClip(d.id, d.originStart + dt);
-    else if (d.mode === "in") trimClip(d.id, "in", d.originStart + dt);
-    else if (d.mode === "out") trimClip(d.id, "out", d.originStart + d.originDur + dt);
-    else {
-      const c = useEditor.getState().project.clips.find((x) => x.id === d.id);
-      if (!c) return;
-      const t = Math.max(c.start, Math.min(timeFromX(e.clientX), clipEnd(c)));
-      if (d.mode === "band") setSpeedMarks(d.bandA ?? t, t);
-      else if (d.mode === "band-in") setSpeedMarks(t, speedMarkOut ?? clipEnd(c));
-      else setSpeedMarks(speedMarkIn ?? c.start, t);
-    }
+    if (!drag.current) return;
+    holdX.current = e.clientX;
+    applyDrag(e.clientX);
+    if (!autoRaf.current) autoRaf.current = requestAnimationFrame(() => tickAutoRef.current());
   };
 
   const onUp = () => {
+    stopAuto();
     if (drag.current) finishEdit();
     drag.current = null;
   };
+
+  applyDragRef.current = applyDrag;
+  tickAutoRef.current = tickAuto;
+
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      if (!drag.current) return;
+      holdX.current = e.clientX;
+      applyDragRef.current(e.clientX);
+      if (!autoRaf.current) autoRaf.current = requestAnimationFrame(() => tickAutoRef.current());
+    };
+    const up = () => {
+      if (autoRaf.current) cancelAnimationFrame(autoRaf.current);
+      autoRaf.current = 0;
+      if (drag.current) finishEdit();
+      drag.current = null;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+  }, [finishEdit]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -300,10 +371,10 @@ export function Timeline() {
                   <div
                     key={c.id}
                     className={`clip ${kindClass(c)} ${selectedId === c.id ? "on" : ""} ${clipSpeed(c) !== 1 ? "sped" : ""}`}
-                    style={{ left: c.start * zoom, width: Math.max(16, c.duration * zoom) }}
+                    style={{ left: c.start * zoom, width: Math.max(16, c.duration * zoom), touchAction: "none" }}
                     onPointerDown={(e) => onPointer(e, c.id, "move")}
                   >
-                    <i className="handle in" onPointerDown={(e) => onPointer(e, c.id, "in")} />
+                    <i className="handle in" style={{ touchAction: "none" }} onPointerDown={(e) => onPointer(e, c.id, "in")} />
                     {(c.type === "video" || c.type === "image" || c.type === "audio") && (
                       <Film clip={c} width={Math.max(16, c.duration * zoom)} height={tr.kind === "video" ? 48 : 30} zoom={zoom} />
                     )}
@@ -336,7 +407,7 @@ export function Timeline() {
                         )}
                       </>
                     )}
-                    <i className="handle out" onPointerDown={(e) => onPointer(e, c.id, "out")} />
+                    <i className="handle out" style={{ touchAction: "none" }} onPointerDown={(e) => onPointer(e, c.id, "out")} />
                   </div>
                 ))}
               {tr.kind === "video" &&
