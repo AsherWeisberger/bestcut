@@ -1,75 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useEditor } from "../store";
-import { blankClip, TRANSITIONS, type TextPreset, type TransitionKind } from "../types";
+import { TRANSITIONS, type TransitionKind } from "../types";
 import { ensureThumb } from "../engine/media";
-import { OVERLAY_CATS, drawTitleOverlay, type OverlayCat } from "../engine/overlays";
 import { fmtTime } from "../types";
-
-function TitleTile({ preset, name, onPick }: { preset: TextPreset; name: string; onPick: () => void }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    canvas.width = 120;
-    canvas.height = 68;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    let raf = 0;
-    let t0 = performance.now();
-    let vis = true;
-    const clip = blankClip({
-      trackId: "trk_ov",
-      type: "text",
-      start: 0,
-      duration: 1.4,
-      text: "Aa",
-      preset,
-      inPreset: preset,
-      fontSize: 28,
-      y: 0.5,
-      x: 0.5,
-      textFace: "fraunces",
-      inDur: 0.38,
-      outDur: 0.18,
-    });
-    const reduced =
-      typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const paint = (now: number) => {
-      const t = reduced ? 0.9 : ((now - t0) / 1000) % 1.4;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = "#0D0F14";
-      ctx.fillRect(0, 0, 120, 68);
-      drawTitleOverlay(ctx, clip, t, 120, 68);
-    };
-    const loop = (now: number) => {
-      if (!vis) return;
-      paint(now);
-      if (reduced) return;
-      raf = requestAnimationFrame(loop);
-    };
-    const io =
-      "IntersectionObserver" in window
-        ? new IntersectionObserver((entries) => {
-            vis = !!(entries[0] && entries[0].isIntersecting);
-            if (vis) raf = requestAnimationFrame(loop);
-            else if (raf) cancelAnimationFrame(raf);
-          })
-        : null;
-    if (io) io.observe(canvas);
-    raf = requestAnimationFrame(loop);
-    return () => {
-      vis = false;
-      cancelAnimationFrame(raf);
-      if (io) io.disconnect();
-    };
-  }, [preset]);
-  return (
-    <button className="title-tile" onClick={onPick}>
-      <canvas ref={ref} width={120} height={68} />
-      <span>{name}</span>
-    </button>
-  );
-}
+import { FxPicker } from "./FxPicker";
 
 function AssetCard({
   id,
@@ -111,6 +45,13 @@ function AssetCard({
   );
 }
 
+const TABS = [
+  { id: "fx" as const, label: "FX" },
+  { id: "media" as const, label: "Media" },
+  { id: "captions" as const, label: "Captions" },
+  { id: "trans" as const, label: "Trans" },
+];
+
 export function Bin({
   onImport,
   onCaptionPass,
@@ -122,21 +63,18 @@ export function Bin({
   const binTab = useEditor((s) => s.binTab);
   const setBinTab = useEditor((s) => s.setBinTab);
   const importFiles = useEditor((s) => s.importFiles);
-  const addText = useEditor((s) => s.addText);
   const addCaption = useEditor((s) => s.addCaption);
   const setTransition = useEditor((s) => s.setTransition);
   const selectedId = useEditor((s) => s.selectedId);
   const list = Object.values(assets);
-  const [titleCat, setTitleCat] = useState<OverlayCat>("kinetic");
-  const titleItems = (OVERLAY_CATS.find((c) => c.id === titleCat) || OVERLAY_CATS[0]).items;
 
   return (
     <aside className="bin">
-      <div className="pane-h">Media</div>
+      <div className="pane-h">{binTab === "fx" ? "Effects" : "Media"}</div>
       <div className="bin-tabs">
-        {(["media", "titles", "captions", "trans"] as const).map((t) => (
-          <button key={t} className={binTab === t ? "on" : ""} onClick={() => setBinTab(t)}>
-            {t === "trans" ? "Trans" : t[0].toUpperCase() + t.slice(1)}
+        {TABS.map((t) => (
+          <button key={t.id} className={binTab === t.id ? "on" : ""} onClick={() => setBinTab(t.id)}>
+            {t.label}
           </button>
         ))}
       </div>
@@ -162,27 +100,7 @@ export function Bin({
             {!list.length && <p className="hint">Drag a card onto a track.</p>}
           </>
         )}
-        {binTab === "titles" && (
-          <>
-            <div className="cat-rail" role="tablist" aria-label="Title look">
-              {OVERLAY_CATS.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  className={titleCat === cat.id ? "on" : ""}
-                  onClick={() => setTitleCat(cat.id)}
-                >
-                  {cat.name}
-                </button>
-              ))}
-            </div>
-            <div className="title-grid">
-              {titleItems.map((p) => (
-                <TitleTile key={p.id} preset={p.id} name={p.name} onPick={() => addText(p.id)} />
-              ))}
-            </div>
-          </>
-        )}
+        {binTab === "fx" && <FxPicker />}
         {binTab === "captions" && (
           <>
             <p className="hint">Caption pass splits a transcript onto the voice clip. Styles burn into the frame.</p>

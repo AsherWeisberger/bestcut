@@ -103,10 +103,10 @@ export function Inspector({
       <div className="body">
         {!clip && (
           <>
-            <p className="hint">Select a clip, or drop a title or caption at the playhead.</p>
+            <p className="hint">Pick an effect from the FX bin. It lands on Overlay and paints on the preview.</p>
             <div className="row">
-              <button className="ghost" onClick={() => addText("rise")}>
-                Title
+              <button className="ghost" onClick={() => addText("scramble")}>
+                Scramble
               </button>
               <button className="ghost" onClick={() => (onCaptionPass ? onCaptionPass() : addCaption())}>
                 Caption pass

@@ -35,18 +35,13 @@ await p.goto(`${base}/?proof=1`, { waitUntil: "networkidle" });
 await p.locator(".dock").waitFor({ timeout: 25000 });
 await p.getByText("Export").first().waitFor({ timeout: 25000 });
 await p.waitForTimeout(1600);
-const titleClip = p.locator(".clip.text").first();
-await titleClip.waitFor({ timeout: 15000 });
-await titleClip.click({ force: true });
-await p.waitForTimeout(400);
-const motion = p.locator(".dock").getByText("Motion");
-if (await motion.count()) await motion.click();
-else {
-  const style = p.locator(".dock").getByText("Style");
-  if (await style.count()) await style.click();
+const fxBtn = p.locator(".dock").getByText("FX", { exact: true });
+await fxBtn.waitFor({ timeout: 15000 });
+if (!(await p.locator(".fx-sheet").isVisible().catch(() => false))) {
+  await fxBtn.click();
 }
 await p.waitForTimeout(400);
-const rail = p.locator(".sheet .cat-rail").first();
+const rail = p.locator(".fx-sheet .cat-rail").first();
 await rail.waitFor({ timeout: 12000 });
 await rail.scrollIntoViewIfNeeded();
 const dock = p.locator(".dock");
@@ -62,6 +57,7 @@ if (sheetOverlap > 12) {
   process.exit(1);
 }
 if (railBox.width < 200) throw new Error("cat rail too narrow");
+if (railBox.height < 28) throw new Error("cat rail collapsed");
 await p.screenshot({ path: "/workspace/bestcut/proof-phone-overlays.png" });
 console.log("phone rail ok", { railBox, dockBox, sheetBox, sheetOverlap });
 await phone.close();

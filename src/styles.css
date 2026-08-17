@@ -96,6 +96,7 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   flex: 0 0 auto; padding: 8px 10px; color: var(--mute);
   font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500;
   border-bottom: 1px solid transparent; margin-bottom: -1px;
+  min-height: 36px; line-height: 1.2;
 }
 .cat-rail button.on { color: var(--paper); border-bottom-color: var(--sand); }
 .bin .cat-rail { margin: 0 -10px 8px; padding: 0 10px; }
@@ -165,7 +166,14 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 .asset-thumb { width: 64px; height: 48px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: var(--ink); }
 .asset b { display: block; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
 .asset span { color: var(--mute); font-size: 11px; }
+.fx-picker { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; overflow: hidden; }
+.fx-picker .cat-rail {
+  position: sticky; top: 0; z-index: 1; background: var(--ink-2);
+  flex: 0 0 auto; min-height: 36px; align-items: center;
+}
+.fx-picker .title-grid { flex: 1; min-height: 0; overflow: auto; }
 .title-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bin-list:has(.fx-picker) { overflow: hidden; }
 .title-tile {
   display: flex; flex-direction: column; gap: 6px; align-items: stretch;
   padding: 0; color: var(--fog);
@@ -418,6 +426,12 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 .sheet-handle {
   width: 36px; height: 4px; border-radius: 99px; background: var(--mute); margin: 4px auto 10px;
 }
+.sheet.fx-sheet {
+  display: flex; flex-direction: column; max-height: 46vh; overflow: hidden;
+  padding-bottom: 8px;
+}
+.sheet.fx-sheet .pane-h { padding: 0 0 6px; }
+.sheet.fx-sheet .fx-picker { flex: 1; min-height: 0; overflow: auto; }
 .sheet h3 { margin: 0 0 10px; font-size: 13px; font-weight: 500; }
 
 .modal {
@@ -689,6 +703,8 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   .cat-rail button { padding: 8px 9px; font-size: 10px; letter-spacing: 0.06em; }
   .style-grid.tight { grid-template-columns: 1fr 1fr; }
   .title-grid { gap: 6px; }
+  .sheet.fx-sheet { max-height: 42vh; }
+  .dock-in button { min-width: 52px; padding: 6px 6px; }
 }
 
 

@@ -162,7 +162,7 @@ export const useEditor = create<Editor>((set, get) => ({
   toast: null,
   snapGuide: null,
   debug: typeof window !== "undefined" && /(?:\?|&)debug=1/.test(window.location.search),
-  binTab: "media",
+  binTab: "fx",
   speedMarkIn: null,
   speedMarkOut: null,
 

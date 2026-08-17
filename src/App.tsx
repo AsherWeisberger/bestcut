@@ -3,7 +3,6 @@ import { emptyProject, type AssetMeta } from "./types";
 import { useEditor } from "./store";
 import { ingestFile } from "./engine/media";
 import { loadAllAssets, loadProject, type AssetRow } from "./db";
-import { EmptyState } from "./ui/EmptyState";
 import { Editor } from "./ui/Editor";
 import { StatusOrb } from "./ui/StatusOrb";
 
@@ -17,7 +16,6 @@ function afterPaint() {
 
 export function App() {
   const hydrating = useEditor((s) => s.hydrating);
-  const project = useEditor((s) => s.project);
   const toast = useEditor((s) => s.toast);
   const hydrate = useEditor((s) => s.hydrate);
   const setDebug = useEditor((s) => s.setDebug);
@@ -88,7 +86,7 @@ export function App() {
   return (
     <>
       {island && <StatusOrb island label="Loading" state="connecting" tone="dark" />}
-      {project.clips.length === 0 ? <EmptyState /> : <Editor />}
+      {hydrating ? null : <Editor />}
       {toast && <div className="toast">{toast}</div>}
     </>
   );

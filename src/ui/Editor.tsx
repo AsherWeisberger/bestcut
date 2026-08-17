@@ -7,15 +7,14 @@ import { ExportSheet } from "./ExportSheet";
 import { CaptionPass } from "./CaptionPass";
 import { Bin } from "./Bin";
 import { PlatformBar } from "./PlatformBar";
+import { FxPicker } from "./FxPicker";
 import {
-  IconAa,
   IconCc,
   IconCopy,
   IconDia,
+  IconFx,
   IconMenu,
-  IconMotion,
   IconPlus,
-  IconRipple,
   IconSpeed,
   IconSplit,
   IconStyle,
@@ -65,14 +64,10 @@ export function Editor() {
   const selectedId = useEditor((s) => s.selectedId);
   const debug = useEditor((s) => s.debug);
   const importFiles = useEditor((s) => s.importFiles);
-  const addText = useEditor((s) => s.addText);
   const splitAtPlayhead = useEditor((s) => s.splitAtPlayhead);
   const deleteSelected = useEditor((s) => s.deleteSelected);
   const duplicateSelected = useEditor((s) => s.duplicateSelected);
-  const updateClip = useEditor((s) => s.updateClip);
   const setClipSpeed = useEditor((s) => s.setClipSpeed);
-  const setRipple = useEditor((s) => s.setRipple);
-  const ripple = useEditor((s) => s.ripple);
   const cycleTransition = useEditor((s) => s.cycleTransition);
   const setDebug = useEditor((s) => s.setDebug);
   const setBinTab = useEditor((s) => s.setBinTab);
@@ -82,6 +77,11 @@ export function Editor() {
   const [exportOpen, setExportOpen] = useState(false);
   const [captionOpen, setCaptionOpen] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [fxOpen, setFxOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    if (!window.matchMedia("(max-width: 959px)").matches) return false;
+    return useEditor.getState().project.clips.length === 0;
+  });
   const phone = useMq("(max-width: 959px)");
   const clip = project.clips.find((c) => c.id === selectedId);
   const kind = clip?.type;
@@ -98,9 +98,16 @@ export function Editor() {
 
   useEffect(() => {
     if (!phone) return;
-    if (kind === "text" || kind === "caption") setSheet(true);
     if (!selectedId) setSheet(false);
-  }, [selectedId, kind, phone]);
+  }, [selectedId, phone]);
+
+  useEffect(() => {
+    if (!phone) {
+      setFxOpen(false);
+      return;
+    }
+    if (useEditor.getState().project.clips.length === 0) setFxOpen(true);
+  }, [phone]);
 
   const downloadJson = () => {
     const blob = new Blob([JSON.stringify({ project, assets: Object.values(assets) }, null, 2)], {
@@ -125,9 +132,9 @@ export function Editor() {
         <IconPlus />
         Import
       </button>
-      <button onClick={() => addText("rise")}>
-        <IconAa />
-        Title
+      <button className={fxOpen ? "on" : ""} onClick={() => { setSheet(false); setFxOpen((v) => !v); }}>
+        <IconFx />
+        FX
       </button>
       <button onClick={() => setCaptionOpen(true)}>
         <IconCc />
@@ -143,7 +150,13 @@ export function Editor() {
         <IconDia />
         Trans
       </button>
-      <button className={sheet ? "on" : ""} onClick={() => setSheet((v) => !v)}>
+      <button
+        className={sheet ? "on" : ""}
+        onClick={() => {
+          setFxOpen(false);
+          setSheet((v) => !v);
+        }}
+      >
         <IconMenu />
         Edit
       </button>
@@ -160,13 +173,13 @@ export function Editor() {
         <IconSpeed />
         {fmtSpeed(clip ? clipSpeed(clip) : 1)}
       </button>
-      <button onClick={() => setSheet(true)}>
+      <button onClick={() => { setFxOpen(false); setSheet(true); }}>
         <IconVol />
         Volume
       </button>
-      <button className={ripple ? "on" : ""} onClick={() => setRipple(!ripple)}>
-        <IconRipple />
-        Ripple
+      <button className={fxOpen ? "on" : ""} onClick={() => { setSheet(false); setFxOpen((v) => !v); }}>
+        <IconFx />
+        FX
       </button>
       <button onClick={() => deleteSelected()}>
         <IconTrash />
@@ -181,13 +194,13 @@ export function Editor() {
         <IconCopy />
         Copy
       </button>
-      <button onClick={() => setSheet(true)}>
+      <button onClick={() => { setFxOpen(false); setSheet(true); }}>
         <IconStyle />
         Style
       </button>
-      <button onClick={() => setSheet(true)}>
-        <IconMotion />
-        Motion
+      <button className={fxOpen ? "on" : ""} onClick={() => { setSheet(false); setFxOpen((v) => !v); }}>
+        <IconFx />
+        FX
       </button>
       <button onClick={splitAtPlayhead}>
         <IconSplit />
@@ -201,6 +214,7 @@ export function Editor() {
   );
 
   const showSheet = phone && sheet;
+  const showFx = phone && fxOpen;
   const mediaClip = kind === "video" || kind === "audio" || kind === "image";
 
   const takeFiles = (list: FileList | File[] | null) => {
@@ -251,6 +265,13 @@ export function Editor() {
           {clip && kind === "shape" && dockClip}
         </div>
       </nav>
+      {showFx && (
+        <div className="sheet fx-sheet" role="dialog" aria-label="Effects">
+          <div className="sheet-handle" onClick={() => setFxOpen(false)} />
+          <div className="pane-h">Effects</div>
+          <FxPicker />
+        </div>
+      )}
       {showSheet && (
         <Inspector embedded onCaptionPass={() => setCaptionOpen(true)} onClose={() => { setSheet(false); select(null); }} />
       )}

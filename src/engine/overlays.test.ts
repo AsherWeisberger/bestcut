@@ -6,6 +6,14 @@ import { setReduceOverride } from "./overlay-fx";
 describe("overlay catalog", () => {
   test("every look has a category and no hyphen in the name", () => {
     const ids = overlayItems().map((i) => i.id);
+    expect(OVERLAY_CATS.map((c) => c.name)).toEqual([
+      "Kinetic",
+      "Reveals",
+      "Particles",
+      "Glitch",
+      "Gallery",
+      "Stickers",
+    ]);
     expect(ids.length).toBeGreaterThanOrEqual(40);
     expect(new Set(ids).size).toBe(ids.length);
     for (const cat of OVERLAY_CATS) {

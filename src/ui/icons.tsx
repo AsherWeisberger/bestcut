@@ -14,6 +14,14 @@ export function IconAa() {
     </svg>
   );
 }
+export function IconFx() {
+  return (
+    <svg {...s}>
+      <path d="M12 3l1.5 4.8L18 9.4l-4.5 1.6L12 16l-1.5-5L6 9.4l4.5-1.6L12 3z" />
+      <path d="M18.2 14.2l.8 2.4 2.4.8-2.4.8-.8 2.4-.8-2.4-2.4-.8 2.4-.8.8-2.4z" />
+    </svg>
+  );
+}
 export function IconCc() {
   return (
     <svg {...s}>

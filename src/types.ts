@@ -76,7 +76,7 @@ export type CaptionStyle = "plate" | "stroke" | "karaoke" | "stack";
 export type TextFace = "fraunces" | "sora";
 export type ShapeKind = "rect" | "ellipse" | "star";
 export type AssetKind = "video" | "audio" | "image";
-export type BinTab = "media" | "titles" | "captions" | "trans";
+export type BinTab = "media" | "fx" | "captions" | "trans";
 
 export const ASPECT_SIZE: Record<Aspect, { w: number; h: number }> = {
   "9:16": { w: 1080, h: 1920 },
