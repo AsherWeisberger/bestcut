@@ -95,8 +95,8 @@ type Editor = {
   replaceCaptions: (ranges: { start: number; end: number }[], clips: Clip[]) => void;
   styleAllCaptions: (style: CaptionStyle) => void;
   updateClip: (id: string, patch: Partial<Clip>) => void;
-  moveClip: (id: string, start: number, meta?: { origin?: number; playhead?: number }) => void;
-  trimClip: (id: string, edge: "in" | "out", t: number, meta?: { origin?: number; playhead?: number }) => void;
+  moveClip: (id: string, start: number, meta?: { origin?: number; playhead?: number; prev?: number }) => void;
+  trimClip: (id: string, edge: "in" | "out", t: number, meta?: { origin?: number; playhead?: number; prev?: number }) => void;
   finishEdit: () => void;
   splitAtPlayhead: () => void;
   deleteSelected: (ripple?: boolean) => void;
@@ -489,10 +489,10 @@ export const useEditor = create<Editor>((set, get) => ({
       zoom,
       mag,
       origin: meta?.origin ?? c.start,
+      prev: meta?.prev,
     });
     const clips = project.clips.map((x) => (x.id === id ? { ...x, start: Math.max(0, t) } : x));
     set({ project: { ...project, clips }, snapGuide: hit });
-    schedulePersist({ ...project, clips });
   },
   trimClip(id, edge, t, meta) {
     const { project, snap, ripple, zoom } = get();
@@ -502,7 +502,7 @@ export const useEditor = create<Editor>((set, get) => ({
     const pts = others(project, id);
     pts.push(meta?.playhead ?? get().playhead);
     const origin = meta?.origin ?? (edge === "in" ? c.start : c.start + c.duration);
-    const { t: st, hit } = snapTime(t, pts, snap || mag, { zoom, mag, origin });
+    const { t: st, hit } = snapTime(t, pts, snap || mag, { zoom, mag, origin, prev: meta?.prev });
     let nextC = { ...c };
     const spd = clipSpeed(c);
     if (edge === "in") {
@@ -532,10 +532,10 @@ export const useEditor = create<Editor>((set, get) => ({
       playhead: edge === "in" ? nextC.start : nextC.start + nextC.duration,
       playing: false,
     });
-    schedulePersist({ ...project, clips });
   },
   finishEdit() {
     set({ snapGuide: null });
+    schedulePersist(get().project);
   },
   splitAtPlayhead() {
     const { project, playhead, selectedId } = get();

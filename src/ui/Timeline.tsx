@@ -3,16 +3,18 @@ import { clipEnd, clipSpeed, fmtSpeed, projectDuration, type Clip } from "../typ
 import { useEditor, watchPlayhead } from "../store";
 import { ensureThumb, peaksFor } from "../engine/media";
 
-function PlayheadNeedle({ labW, zoom }: { labW: number; zoom: number }) {
+type DragMode = "move" | "in" | "out" | "band" | "band-in" | "band-out" | "scrub";
+
+function PlayheadNeedle({ zoom }: { zoom: number }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     return watchPlayhead((t) => {
       const el = ref.current;
-      if (el) el.style.left = `${labW + t * zoom}px`;
+      if (el) el.style.left = `${t * zoom}px`;
     });
-  }, [labW, zoom]);
+  }, [zoom]);
   return (
-    <div className="playhead" ref={ref} style={{ left: labW }}>
+    <div className="playhead" ref={ref} style={{ left: 0 }}>
       <b />
     </div>
   );
@@ -71,7 +73,7 @@ function Film({ clip, width, height, zoom }: { clip: Clip; width: number; height
         });
       }
     }
-  }, [clip, width, height, zoom, clip.text, clip.assetId]);
+  }, [clip.type, clip.assetId, clip.text, width, height, zoom]);
   return <canvas ref={ref} className="film" />;
 }
 
@@ -107,12 +109,14 @@ export function Timeline() {
   const width = dur * zoom;
   const drag = useRef<{
     id: string;
-    mode: "move" | "in" | "out" | "band" | "band-in" | "band-out";
+    mode: DragMode;
     originX: number;
     originStart: number;
     originDur: number;
     originPlayhead: number;
     grabOffset: number;
+    rawStart: number;
+    pointerId: number;
     alt?: boolean;
     bandA?: number;
   } | null>(null);
@@ -123,29 +127,44 @@ export function Timeline() {
   const autoRaf = useRef(0);
   const applyDragRef = useRef<(x: number) => void>(() => {});
   const tickAutoRef = useRef<() => void>(() => {});
-  const labW = typeof window !== "undefined" && window.matchMedia("(max-width: 959px)").matches ? 48 : 56;
+
+  const setDragging = (on: boolean) => {
+    scrollRef.current?.classList.toggle("dragging", on);
+  };
 
   const timeFromX = (clientX: number) => {
     const sc = scrollRef.current;
     if (!sc) return 0;
-    const x = clientX - sc.getBoundingClientRect().left + sc.scrollLeft - labW;
-    return Math.max(0, x / zoom);
+    const x = clientX - sc.getBoundingClientRect().left + sc.scrollLeft;
+    return x / zoom;
   };
 
   const applyDrag = (clientX: number) => {
     const d = drag.current;
     if (!d) return;
-    const meta = { origin: d.originStart, playhead: d.originPlayhead };
-    if (d.mode === "move") moveClip(d.id, timeFromX(clientX) - d.grabOffset, meta);
-    else if (d.mode === "in") trimClip(d.id, "in", timeFromX(clientX), { ...meta, origin: d.originStart });
-    else if (d.mode === "out") trimClip(d.id, "out", timeFromX(clientX), { ...meta, origin: d.originStart + d.originDur });
-    else {
+    const t = timeFromX(clientX);
+    if (d.mode === "scrub") {
+      setPlayhead(Math.max(0, t));
+      return;
+    }
+    const meta = { origin: d.originStart, playhead: d.originPlayhead, prev: d.rawStart };
+    if (d.mode === "move") {
+      const start = t - d.grabOffset;
+      d.rawStart = start;
+      moveClip(d.id, start, meta);
+    } else if (d.mode === "in") {
+      d.rawStart = t;
+      trimClip(d.id, "in", t, { ...meta, origin: d.originStart });
+    } else if (d.mode === "out") {
+      d.rawStart = t;
+      trimClip(d.id, "out", t, { ...meta, origin: d.originStart + d.originDur });
+    } else {
       const c = useEditor.getState().project.clips.find((x) => x.id === d.id);
       if (!c) return;
-      const t = Math.max(c.start, Math.min(timeFromX(clientX), clipEnd(c)));
-      if (d.mode === "band") setSpeedMarks(d.bandA ?? t, t);
-      else if (d.mode === "band-in") setSpeedMarks(t, speedMarkOut ?? clipEnd(c));
-      else setSpeedMarks(speedMarkIn ?? c.start, t);
+      const clipped = Math.max(c.start, Math.min(t, clipEnd(c)));
+      if (d.mode === "band") setSpeedMarks(d.bandA ?? clipped, clipped);
+      else if (d.mode === "band-in") setSpeedMarks(clipped, speedMarkOut ?? clipEnd(c));
+      else setSpeedMarks(speedMarkIn ?? c.start, clipped);
     }
   };
 
@@ -163,10 +182,10 @@ export function Timeline() {
     }
     const r = sc.getBoundingClientRect();
     const x = holdX.current;
-    const zone = 72;
+    const zone = 64;
     let dx = 0;
-    if (x < r.left + zone) dx = -Math.max(10, Math.round((zone - (x - r.left)) * 0.55));
-    else if (x > r.right - 48) dx = Math.max(10, Math.round((x - (r.right - 48)) * 0.55));
+    if (x < r.left + zone) dx = -Math.max(14, Math.round((zone - (x - r.left)) * 0.9));
+    else if (x > r.right - zone) dx = Math.max(14, Math.round((x - (r.right - zone)) * 0.9));
     if (!dx) {
       autoRaf.current = 0;
       return;
@@ -176,7 +195,7 @@ export function Timeline() {
     autoRaf.current = requestAnimationFrame(() => tickAutoRef.current());
   };
 
-  const onPointer = (e: React.PointerEvent, id: string, mode: "move" | "in" | "out" | "band" | "band-in" | "band-out") => {
+  const onPointer = (e: React.PointerEvent, id: string, mode: DragMode) => {
     e.stopPropagation();
     e.preventDefault();
     const c = project.clips.find((x) => x.id === id);
@@ -192,6 +211,8 @@ export function Timeline() {
       originDur: c.duration,
       originPlayhead: useEditor.getState().playhead,
       grabOffset: t0 - c.start,
+      rawStart: c.start,
+      pointerId: e.pointerId,
       alt: e.altKey,
     };
     holdX.current = e.clientX;
@@ -200,20 +221,43 @@ export function Timeline() {
       drag.current.bandA = tClip;
       setSpeedMarks(tClip, tClip);
     }
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const cap = e.currentTarget as HTMLElement;
+    if (cap.setPointerCapture) cap.setPointerCapture(e.pointerId);
+    setDragging(true);
   };
 
-  const onMove = (e: React.PointerEvent) => {
-    if (!drag.current) return;
+  const beginScrub = (e: React.PointerEvent) => {
+    const t = e.target as HTMLElement;
+    if (t.closest(".clip, .handle, .diamond, .speed-rail, .speed-band")) return;
+    e.stopPropagation();
+    e.preventDefault();
+    setPlaying(false);
+    const t0 = Math.max(0, timeFromX(e.clientX));
+    setPlayhead(t0);
+    select(null);
+    drag.current = {
+      id: "",
+      mode: "scrub",
+      originX: e.clientX,
+      originStart: t0,
+      originDur: 0,
+      originPlayhead: t0,
+      grabOffset: 0,
+      rawStart: t0,
+      pointerId: e.pointerId,
+    };
     holdX.current = e.clientX;
-    applyDrag(e.clientX);
-    if (!autoRaf.current) autoRaf.current = requestAnimationFrame(() => tickAutoRef.current());
+    const cap = e.currentTarget as HTMLElement;
+    if (cap.setPointerCapture) cap.setPointerCapture(e.pointerId);
+    setDragging(true);
   };
 
-  const onUp = () => {
+  const endDrag = () => {
     stopAuto();
-    if (drag.current) finishEdit();
+    const d = drag.current;
+    if (d && d.mode !== "scrub") finishEdit();
     drag.current = null;
+    setDragging(false);
   };
 
   applyDragRef.current = applyDrag;
@@ -222,23 +266,25 @@ export function Timeline() {
   useEffect(() => {
     const move = (e: PointerEvent) => {
       if (!drag.current) return;
+      e.preventDefault();
       holdX.current = e.clientX;
       applyDragRef.current(e.clientX);
       if (!autoRaf.current) autoRaf.current = requestAnimationFrame(() => tickAutoRef.current());
     };
-    const up = () => {
-      if (autoRaf.current) cancelAnimationFrame(autoRaf.current);
-      autoRaf.current = 0;
-      if (drag.current) finishEdit();
-      drag.current = null;
+    const up = () => endDrag();
+    const touchMove = (e: TouchEvent) => {
+      if (!drag.current) return;
+      e.preventDefault();
     };
-    window.addEventListener("pointermove", move);
+    window.addEventListener("pointermove", move, { passive: false });
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
+    window.addEventListener("touchmove", touchMove, { passive: false });
     return () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
+      window.removeEventListener("touchmove", touchMove);
     };
   }, [finishEdit]);
 
@@ -260,17 +306,18 @@ export function Timeline() {
     if (!playing) return;
     return watchPlayhead((t) => {
       const el = scrollRef.current;
-      if (!el) return;
-      const x = labW + t * zoom;
+      if (!el || drag.current) return;
+      const x = t * zoom;
       const view = el.clientWidth;
       const left = el.scrollLeft;
       const mid0 = left + view * 0.2;
       const mid1 = left + view * 0.8;
       if (x < mid0 || x > mid1) el.scrollLeft = x - view * 0.5;
     });
-  }, [playing, zoom, labW]);
+  }, [playing, zoom]);
 
   const onTouch = (e: React.TouchEvent) => {
+    if (drag.current) return;
     if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -287,7 +334,7 @@ export function Timeline() {
   const step = zoom < 40 ? 5 : zoom < 70 ? 2 : 1;
   for (let s = 0; s <= dur; s += step) {
     ticks.push(
-      <span key={s} className="tick" style={{ left: s * zoom + labW }}>
+      <span key={s} className={`tick${s === 0 ? " origin" : ""}`} style={{ left: s * zoom }}>
         {s}s
       </span>,
     );
@@ -314,127 +361,112 @@ export function Timeline() {
         <button onClick={() => setZoom(zoom + 12)}>+</button>
         <button
           onClick={() => {
-            const w = (scrollRef.current?.clientWidth || 640) - labW;
+            const w = scrollRef.current?.clientWidth || 640;
             fitZoom(w);
           }}
         >
           Fit
         </button>
       </div>
-      <div
-        className="tl-scroll"
-        ref={scrollRef}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
-        onPointerCancel={onUp}
-        onTouchStart={onTouch}
-        onTouchMove={onTouch}
-        onTouchEnd={() => (pinch.current = null)}
-        onDragOver={(e) => {
-          e.preventDefault();
-        }}
-      >
+      <div className="tl-body">
+        <div className="tl-rail">
+          <div className="tl-rail-head" />
+          {project.tracks.map((tr) => (
+            <div key={tr.id} className={`track-lab ${tr.kind}`}>
+              {tr.name}
+            </div>
+          ))}
+        </div>
         <div
-          className="tl-ruler"
-          style={{ width: width + labW }}
-          onPointerDown={(e) => {
-            setPlaying(false);
-            setPlayhead(timeFromX(e.clientX));
+          className="tl-scroll"
+          ref={scrollRef}
+          onTouchStart={onTouch}
+          onTouchMove={onTouch}
+          onTouchEnd={() => (pinch.current = null)}
+          onDragOver={(e) => {
+            e.preventDefault();
           }}
         >
-          {ticks}
-        </div>
-        {project.tracks.map((tr) => (
-          <div key={tr.id} className={`track ${tr.kind}`}>
-            <div className="track-lab">{tr.name}</div>
-            <div
-              className="lane"
-              ref={tr.kind === "video" ? laneRef : undefined}
-              style={{ width }}
-              onPointerDown={(e) => {
-                if ((e.target as HTMLElement).classList.contains("lane")) {
-                  setPlaying(false);
-                  setPlayhead(timeFromX(e.clientX));
-                  select(null);
-                }
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                const id = e.dataTransfer.getData("assetId");
-                if (id) dropAsset(id, tr.id, timeFromX(e.clientX));
-              }}
-              onDragOver={(e) => e.preventDefault()}
-            >
-              {project.clips
-                .filter((c) => c.trackId === tr.id)
-                .map((c) => (
-                  <div
-                    key={c.id}
-                    className={`clip ${kindClass(c)} ${selectedId === c.id ? "on" : ""} ${clipSpeed(c) !== 1 ? "sped" : ""}`}
-                    style={{ left: c.start * zoom, width: Math.max(16, c.duration * zoom), touchAction: "none" }}
-                    onPointerDown={(e) => onPointer(e, c.id, "move")}
-                  >
-                    <i className="handle in" style={{ touchAction: "none" }} onPointerDown={(e) => onPointer(e, c.id, "in")} />
-                    {(c.type === "video" || c.type === "image" || c.type === "audio") && (
-                      <Film clip={c} width={Math.max(16, c.duration * zoom)} height={tr.kind === "video" ? 48 : 30} zoom={zoom} />
-                    )}
-                    <span className="clip-lab">{clipLabel(c, assets[c.assetId || ""]?.name)}</span>
-                    {clipSpeed(c) !== 1 && <em className="spd-badge">{fmtSpeed(clipSpeed(c))}</em>}
-                    {(c.type === "video" || c.type === "audio") && selectedId === c.id && (
-                      <>
-                        <i
-                          className="speed-rail"
-                          title="Drag a stretch to speed"
-                          onPointerDown={(e) => onPointer(e, c.id, "band")}
-                        />
-                        {speedMarkIn != null && speedMarkOut != null && (
-                          <i
-                            className="speed-band"
-                            style={{
-                              left: Math.max(0, (Math.min(speedMarkIn, speedMarkOut) - c.start) * zoom),
-                              width: Math.max(4, Math.abs(speedMarkOut - speedMarkIn) * zoom),
-                            }}
-                          >
-                            <b
-                              className="band-h in"
-                              onPointerDown={(e) => onPointer(e, c.id, "band-in")}
-                            />
-                            <b
-                              className="band-h out"
-                              onPointerDown={(e) => onPointer(e, c.id, "band-out")}
-                            />
-                          </i>
-                        )}
-                      </>
-                    )}
-                    <i className="handle out" style={{ touchAction: "none" }} onPointerDown={(e) => onPointer(e, c.id, "out")} />
-                  </div>
-                ))}
-              {tr.kind === "video" &&
-                vClips.map((c, i) => {
-                  if (i === 0) return null;
-                  const prev = vClips[i - 1];
-                  if (Math.abs(c.start - clipEnd(prev)) > 0.05) return null;
-                  return (
-                    <button
-                      key={`dia-${c.id}`}
-                      className={`diamond ${c.transitionIn}`}
-                      style={{ left: c.start * zoom }}
-                      title={c.transitionIn}
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        cycleTransition(c.id);
-                      }}
-                    />
-                  );
-                })}
-            </div>
+          <div className="tl-ruler" style={{ width }} onPointerDown={beginScrub}>
+            {ticks}
           </div>
-        ))}
-        <PlayheadNeedle labW={labW} zoom={zoom} />
-        {snapGuide != null && (
-          <div className="snap-line" style={{ left: labW + snapGuide * zoom }} />
-        )}
+          {project.tracks.map((tr) => (
+            <div key={tr.id} className={`track ${tr.kind}`}>
+              <div
+                className="lane"
+                ref={tr.kind === "video" ? laneRef : undefined}
+                style={{ width }}
+                onPointerDown={beginScrub}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const id = e.dataTransfer.getData("assetId");
+                  if (id) dropAsset(id, tr.id, Math.max(0, timeFromX(e.clientX)));
+                }}
+                onDragOver={(e) => e.preventDefault()}
+              >
+                {project.clips
+                  .filter((c) => c.trackId === tr.id)
+                  .map((c) => (
+                    <div
+                      key={c.id}
+                      className={`clip ${kindClass(c)} ${selectedId === c.id ? "on" : ""} ${clipSpeed(c) !== 1 ? "sped" : ""}`}
+                      style={{ left: c.start * zoom, width: Math.max(16, c.duration * zoom), touchAction: "none" }}
+                      onPointerDown={(e) => onPointer(e, c.id, "move")}
+                    >
+                      <i className="handle in" onPointerDown={(e) => onPointer(e, c.id, "in")} />
+                      {(c.type === "video" || c.type === "image" || c.type === "audio") && (
+                        <Film clip={c} width={Math.max(16, c.duration * zoom)} height={tr.kind === "video" ? 48 : 30} zoom={zoom} />
+                      )}
+                      <span className="clip-lab">{clipLabel(c, assets[c.assetId || ""]?.name)}</span>
+                      {clipSpeed(c) !== 1 && <em className="spd-badge">{fmtSpeed(clipSpeed(c))}</em>}
+                      {(c.type === "video" || c.type === "audio") && selectedId === c.id && (
+                        <>
+                          <i
+                            className="speed-rail"
+                            title="Drag a stretch to speed"
+                            onPointerDown={(e) => onPointer(e, c.id, "band")}
+                          />
+                          {speedMarkIn != null && speedMarkOut != null && (
+                            <i
+                              className="speed-band"
+                              style={{
+                                left: Math.max(0, (Math.min(speedMarkIn, speedMarkOut) - c.start) * zoom),
+                                width: Math.max(4, Math.abs(speedMarkOut - speedMarkIn) * zoom),
+                              }}
+                            >
+                              <b className="band-h in" onPointerDown={(e) => onPointer(e, c.id, "band-in")} />
+                              <b className="band-h out" onPointerDown={(e) => onPointer(e, c.id, "band-out")} />
+                            </i>
+                          )}
+                        </>
+                      )}
+                      <i className="handle out" onPointerDown={(e) => onPointer(e, c.id, "out")} />
+                    </div>
+                  ))}
+                {tr.kind === "video" &&
+                  vClips.map((c, i) => {
+                    if (i === 0) return null;
+                    const prev = vClips[i - 1];
+                    if (Math.abs(c.start - clipEnd(prev)) > 0.05) return null;
+                    return (
+                      <button
+                        key={`dia-${c.id}`}
+                        className={`diamond ${c.transitionIn}`}
+                        style={{ left: c.start * zoom }}
+                        title={c.transitionIn}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          cycleTransition(c.id);
+                        }}
+                      />
+                    );
+                  })}
+              </div>
+            </div>
+          ))}
+          <PlayheadNeedle zoom={zoom} />
+          {snapGuide != null && <div className="snap-line" style={{ left: snapGuide * zoom }} />}
+        </div>
       </div>
     </div>
   );

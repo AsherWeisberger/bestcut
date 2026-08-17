@@ -14,14 +14,20 @@ describe("snapTime", () => {
     expect(hit).toBeNull();
   });
 
+  test("moving away from the playhead does not recapture it", () => {
+    const { t, hit } = snapTime(74.92, [0, 75], true, { zoom: 80, mag: true, origin: 10, prev: 74.98 });
+    expect(t).toBeCloseTo(74.92, 5);
+    expect(hit).toBeNull();
+  });
+
   test("strong snap at 0 while Mag is on", () => {
-    const { t, hit } = snapTime(0.45, [0, 12], true, { zoom: 80, mag: true, origin: 12 });
+    const { t, hit } = snapTime(0.4, [0, 12], true, { zoom: 80, mag: true, origin: 12, prev: 0.5 });
     expect(t).toBe(0);
     expect(hit).toBe(0);
   });
 
   test("still snaps to playhead when approaching it", () => {
-    const { t, hit } = snapTime(75.1, [0, 75], true, { zoom: 80, mag: true, origin: 10 });
+    const { t, hit } = snapTime(75.1, [0, 75], true, { zoom: 80, mag: true, origin: 10, prev: 75.2 });
     expect(t).toBe(75);
     expect(hit).toBe(75);
   });
@@ -29,6 +35,12 @@ describe("snapTime", () => {
   test("start may be 0 with snapping off", () => {
     const { t, hit } = snapTime(-2, [75], false, { zoom: 80, mag: false, origin: 75 });
     expect(t).toBe(0);
+    expect(hit).toBeNull();
+  });
+
+  test("can leave 0 after snapping there", () => {
+    const { t, hit } = snapTime(0.2, [0, 12], true, { zoom: 80, mag: true, origin: 0, prev: 0.05 });
+    expect(t).toBeCloseTo(0.2, 5);
     expect(hit).toBeNull();
   });
 });

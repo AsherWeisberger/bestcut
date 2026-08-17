@@ -28,14 +28,29 @@ describe("moveClip to timeline start", () => {
 
   test("QA: clip at 75s drags to 0 with Mag and Snap on", () => {
     const ed = useEditor.getState();
-    ed.moveClip("c1", 0, { origin: 75, playhead: 75 });
+    ed.moveClip("c1", 0, { origin: 75, playhead: 75, prev: 0.4 });
     ed.finishEdit();
     expect(useEditor.getState().project.clips[0].start).toBe(0);
   });
 
   test("leaving the playhead does not snap the clip back to 75", () => {
     const ed = useEditor.getState();
-    ed.moveClip("c1", 74.6, { origin: 75, playhead: 75 });
+    ed.moveClip("c1", 74.6, { origin: 75, playhead: 75, prev: 74.9 });
     expect(useEditor.getState().project.clips[0].start).toBeCloseTo(74.6, 5);
+  });
+
+  test("finishEdit does not pack a gap closed", () => {
+    const p = emptyProject();
+    p.magnetic = true;
+    p.clips = [
+      blankClip({ id: "a", trackId: "trk_v1", type: "video", start: 0, duration: 4, sourceDuration: 4 }),
+      blankClip({ id: "b", trackId: "trk_v1", type: "video", start: 12, duration: 4, sourceDuration: 4 }),
+    ];
+    useEditor.setState({ project: p, snap: true, playhead: 0, zoom: 80, hydrating: false, snapGuide: null });
+    const ed = useEditor.getState();
+    ed.moveClip("b", 8, { origin: 12, playhead: 0 });
+    ed.finishEdit();
+    const b = useEditor.getState().project.clips.find((c) => c.id === "b");
+    expect(b?.start).toBeCloseTo(8, 5);
   });
 });

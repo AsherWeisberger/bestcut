@@ -15,7 +15,7 @@
   --display: "Fraunces", Georgia, serif;
   --dock: 64px;
   --tl-h: 176px;
-  --lab: 56px;
+  --lab: 80px;
 }
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; background: var(--ink); color: var(--paper); }
@@ -178,25 +178,52 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 .tl-tools button:hover, .tl-tools button.on { color: var(--paper); background: var(--ink-3); }
 .tl-tools button.on { color: var(--sand); }
 .tl-sp { flex: 1; }
-.tl-scroll { flex: 1; overflow: auto; position: relative; }
-.tl-ruler { height: 22px; position: relative; color: var(--mute); font-size: 10px; border-bottom: 1px solid var(--line); }
-.tl-ruler .tick { position: absolute; top: 4px; transform: translateX(-50%); }
-.track { display: grid; grid-template-columns: var(--lab) 1fr; height: 36px; border-bottom: 1px solid #22242c; }
+.tl-body {
+  flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: row;
+  position: relative; background: var(--ink-2);
+}
+.tl-rail {
+  flex: 0 0 var(--lab); width: var(--lab); display: flex; flex-direction: column;
+  background: var(--ink-2); border-right: 1px solid var(--line); z-index: 6;
+  position: relative; pointer-events: none; user-select: none; overflow: hidden;
+}
+.tl-rail-head {
+  height: 22px; flex-shrink: 0; border-bottom: 1px solid var(--line);
+  background: var(--ink-2);
+}
+.track-lab {
+  display: flex; align-items: center; padding: 0 10px; color: var(--fog); font-size: 9px;
+  letter-spacing: 0.08em; text-transform: uppercase; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: clip;
+  border-bottom: 1px solid #22242c; background: var(--ink-2);
+  height: 36px; box-sizing: border-box;
+}
+.track-lab.video { height: 56px; }
+.track-lab.overlay { height: 40px; }
+.track-lab.audio { height: 40px; }
+.track-lab.captions { height: 36px; }
+.tl-scroll {
+  flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; position: relative;
+  overscroll-behavior-x: contain; touch-action: pan-x; background: var(--ink);
+}
+.tl-scroll.dragging { touch-action: none; cursor: grabbing; }
+.tl-ruler { height: 22px; position: relative; color: var(--mute); font-size: 10px; border-bottom: 1px solid var(--line); touch-action: none; }
+.tl-ruler .tick { position: absolute; top: 4px; transform: translateX(-50%); pointer-events: none; }
+.tl-ruler .tick.origin { transform: none; padding-left: 5px; }
+.track { display: block; height: 36px; border-bottom: 1px solid #22242c; position: relative; }
 .track.video { height: 56px; }
 .track.overlay { height: 40px; }
 .track.audio { height: 40px; }
 .track.captions { height: 36px; }
-.track-lab {
-  display: flex; align-items: center; padding: 0 8px; color: var(--fog); font-size: 10px;
-  letter-spacing: 0.12em; text-transform: uppercase; border-right: 1px solid var(--line); background: var(--ink-2);
-  position: sticky; left: 0; z-index: 2;
-}
-.lane { position: relative; }
+.lane { position: relative; height: 100%; touch-action: pan-x; }
+.tl-scroll.dragging .lane { touch-action: none; }
 .clip {
   position: absolute; top: 4px; bottom: 4px; border-radius: 7px; border: 1px solid #4a463c;
   background: linear-gradient(180deg, #2a2c28, #1c1e1b); overflow: hidden; cursor: grab;
-  color: var(--paper); font-size: 11px; user-select: none;
+  color: var(--paper); font-size: 11px; user-select: none; touch-action: none;
 }
+.clip, .clip * { touch-action: none; }
+
 .clip.audio { background: linear-gradient(180deg, #24303a, #1a2229); border-color: #3d5566; }
 .clip.caption { background: linear-gradient(180deg, #3a3428, #2a261e); border-color: var(--sand); color: var(--sand); }
 .clip.text, .clip.shape { background: linear-gradient(180deg, #2c2833, #1e1c24); border-color: #5a5470; }
@@ -251,7 +278,7 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   text-shadow: 0 1px 2px #0d0f14;
 }
 .clip .handle {
-  position: absolute; top: 0; width: 8px; height: 100%; cursor: ew-resize; z-index: 2;
+  position: absolute; top: 0; width: 8px; height: 100%; cursor: ew-resize; z-index: 2; touch-action: none;
 }
 .clip .handle.in { left: 0; }
 .clip .handle.out { right: 0; }
@@ -440,12 +467,17 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   .seg button { padding: 5px 8px; font-size: 10px; }
   .cta { padding: 7px 11px; font-size: 12px; }
   .word { font-size: 16px; }
-  :root { --tl-h: 176px; --lab: 48px; }
+  :root { --tl-h: 176px; --lab: 80px; }
   .tl-tools { height: 28px; }
   .track.video { height: 44px; }
   .track.overlay { height: 32px; }
   .track.audio { height: 32px; }
   .track.captions { height: 28px; }
+  .track-lab { font-size: 8px; letter-spacing: 0.06em; padding: 0 8px; }
+  .track-lab.video { height: 44px; }
+  .track-lab.overlay { height: 32px; }
+  .track-lab.audio { height: 32px; }
+  .track-lab.captions { height: 28px; }
   .clip .handle { width: 14px; }
   .clip .handle::after { width: 2px; background: var(--paper); top: 4px; bottom: 4px; }
   .icon-btn.play { width: 44px; height: 44px; }
@@ -504,7 +536,7 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 
 /* Desktop NLE */
 @media (min-width: 1100px) {
-  :root { --tl-h: 260px; --lab: 56px; }
+  :root { --tl-h: 260px; --lab: 80px; }
   .stage {
     grid-template-columns: 248px minmax(0, 1fr) 288px;
     grid-template-rows: minmax(0, 1fr) 260px;
