@@ -386,17 +386,17 @@ export const useEditor = create<Editor>((set, get) => ({
     schedulePersist(project);
   },
 
-  addText(preset = "scramble") {
+  addText(preset = "scrambletext") {
     get().push();
     const { project, playhead } = get();
     const cat = catForPreset(preset);
-    const y = cat === "stickers" ? 0.78 : cat === "gallery" ? 0.5 : 0.38;
-    const fontSize = cat === "stickers" ? 48 : cat === "gallery" ? 64 : 92;
+    const y = cat === "buttons" ? 0.78 : cat === "kinetic" ? 0.38 : 0.5;
+    const fontSize = cat === "buttons" ? 48 : cat === "kinetic" ? 92 : 72;
     const clip = blankClip({
       trackId: "trk_ov",
       type: "text",
       start: playhead,
-      duration: 2.8,
+      duration: 3.6,
       text: "BESTCUT",
       preset,
       inPreset: preset,
@@ -406,7 +406,7 @@ export const useEditor = create<Editor>((set, get) => ({
     });
     const next = { ...project, clips: [...project.clips, clip] };
     set({ project: next, selectedId: clip.id, playhead, playing: true });
-    window.setTimeout(() => useEditor.getState().setPlaying(false), 1200);
+    window.setTimeout(() => useEditor.getState().setPlaying(false), 2400);
     schedulePersist(next);
   },
   addCaption(text = "Add a caption") {

@@ -18,7 +18,7 @@ CapCut paywalls basics. OpenCut still ships a backend classic and blocks phones.
 - Split, trim, snap, undo, ripple, kinetic titles, in-tab auto captions (Whisper-tiny) plus SRT.
 - Speed 0.5×–10× on a whole clip, or a marked In/Out stretch (splits, shortens, ripples). Preview and export share one renderer.
 - Platform tabs: TikTok, YouTube, Instagram, Facebook, LinkedIn. Canvas aspect and export preset match the tab (YouTube Short, Instagram Feed 4:5, and the rest). Preview equals export.
-- Overlay titles that bake into the file. The FX bin is on a fresh project: Kinetic, Reveals, Particles, Glitch, Gallery, Stickers. Tap a tile to drop it on Overlay. Scramble, morph, and the rest paint on the same canvas as preview and export.
+- Overlay titles that bake into the file. The FX bin is on a fresh project: Kinetic, Reveals, Particles, Background, Gallery, Interactive, Buttons — the full visual catalog, tap to drop on Overlay. Preview plays the live effect; export rasterizes the same overlay into the MP4.
 - Export 1080p 30fps MP4 and WebM. Preview equals export.
 - IndexedDB + project JSON download.
 

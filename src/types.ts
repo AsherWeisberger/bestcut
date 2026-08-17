@@ -1,75 +1,7 @@
 export type Aspect = "9:16" | "1:1" | "16:9" | "4:5";
 export type TrackKind = "video" | "overlay" | "audio" | "captions";
 export type ClipType = "video" | "image" | "audio" | "text" | "caption" | "shape";
-export type TextPreset =
-  | "rise"
-  | "bloom"
-  | "fade"
-  | "type"
-  | "stamp"
-  | "drift"
-  | "split"
-  | "hold"
-  | "slide-up"
-  | "pop"
-  | "type-on"
-  | "scramble"
-  | "morph"
-  | "weight"
-  | "typewriter"
-  | "pixel"
-  | "mask"
-  | "brush"
-  | "fadeup"
-  | "dust"
-  | "spark"
-  | "vapor"
-  | "glitchtext"
-  | "smoky"
-  | "spotlight"
-  | "textwave"
-  | "flicker"
-  | "letterswap"
-  | "charwaves"
-  | "spring"
-  | "vaporize"
-  | "fluidtext"
-  | "staggerrise"
-  | "letterdrop"
-  | "rolling"
-  | "textnoise"
-  | "spiral"
-  | "letterswing"
-  | "textwipe"
-  | "flip"
-  | "appear"
-  | "coloursweep"
-  | "elastic"
-  | "falling"
-  | "emerge"
-  | "typesequence"
-  | "gradient"
-  | "unfold"
-  | "dither"
-  | "focus"
-  | "imagefold"
-  | "pixelunfold"
-  | "fluidimage"
-  | "imageripple"
-  | "ascii"
-  | "shine"
-  | "starburst"
-  | "glitter"
-  | "tunnel"
-  | "emoji"
-  | "stardust"
-  | "snow"
-  | "glitch"
-  | "distort"
-  | "inkbleed"
-  | "imagestack"
-  | "neon"
-  | "pill";
+export type TextPreset = string;
 export type OutPreset = "fade" | "sink" | "scale" | "hold";
 export type TransitionKind = "cut" | "fade" | "dissolve" | "slide" | "wipe";
 export type CaptionStyle = "plate" | "stroke" | "karaoke" | "stack";
@@ -269,12 +201,67 @@ export function blankClip(partial: Partial<Clip> & Pick<Clip, "trackId" | "type"
   };
 }
 
+const PRESET_ALIAS: Record<string, TextPreset> = {
+  "slide-up": "rise",
+  pop: "bloom",
+  "type-on": "type",
+  scramble: "scrambletext",
+  morph: "textmorph",
+  weight: "weight-hover",
+  pixel: "pixelreveal",
+  mask: "mask-text-reveal",
+  brush: "brush-reveal",
+  fadeup: "stagger-text-rise",
+  dust: "dust-text-reveal",
+  spark: "starburst",
+  vapor: "text-vaporize",
+  glitchtext: "glitch-text",
+  smoky: "smokytext",
+  spotlight: "spotlighttext",
+  textwave: "text-wave",
+  flicker: "flickertext",
+  letterswap: "random-letter-swap",
+  charwaves: "character-waves",
+  spring: "spring-text",
+  vaporize: "text-vaporize",
+  fluidtext: "fluid-text",
+  staggerrise: "stagger-text-rise",
+  letterdrop: "letter-drop",
+  rolling: "rolling-letters",
+  textnoise: "text-noise",
+  spiral: "spiral-text",
+  letterswing: "letter-swing",
+  textwipe: "text-wipe",
+  flip: "mechanical-flip",
+  appear: "appear-text",
+  coloursweep: "text-colour-sweep",
+  elastic: "elastic-text",
+  falling: "falling-text",
+  emerge: "text-emerge",
+  typesequence: "type-sequence",
+  gradient: "gradient-text",
+  unfold: "3d-text-unfold",
+  dither: "dither-effect",
+  focus: "focus-reveal",
+  pixelunfold: "pixel-unfold",
+  fluidimage: "fluid-image-reveal",
+  imageripple: "image-ripple",
+  ascii: "ascii-reveal",
+  shine: "shine-card",
+  glitter: "glitterwrap",
+  tunnel: "particletunnel",
+  emoji: "emoji-particle",
+  snow: "snowfall",
+  glitch: "glitch-text",
+  distort: "text-distortion",
+  imagestack: "swipe-stack",
+  neon: "neon-border",
+  pill: "shiny-pill",
+};
+
 export function normalizeIn(p?: TextPreset): TextPreset {
-  if (p === "slide-up") return "rise";
-  if (p === "pop") return "bloom";
-  if (p === "type-on") return "type";
-  if (p === "fadeup") return "fadeup";
-  return p || "rise";
+  if (!p) return "scrambletext";
+  return PRESET_ALIAS[p] || p;
 }
 
 export function fmtTime(t: number) {

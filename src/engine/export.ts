@@ -16,6 +16,9 @@ import { ASPECT_SIZE, FPS, projectDuration } from "../types";
 import { mixProjectAudio } from "./audio";
 import { frameForClip } from "./media";
 import { renderFrame, visibleMediaClips, type FrameBank } from "./render";
+import { blitKit } from "../kit/capture";
+import { isKitPreset } from "../kit/catalog";
+import { useEditor } from "../store";
 
 export type ExportFormat = "mp4" | "webm";
 
@@ -152,6 +155,11 @@ async function exportWebCodecs(
     const t = i / FPS;
     const bank = await fillBank(project, t, false);
     renderFrame(ctx, t, project, bank);
+    if (project.clips.some((c) => c.type === "text" && isKitPreset(c.inPreset || c.preset))) {
+      useEditor.getState().setPlayhead(t);
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      await blitKit(ctx, w, h);
+    }
     await videoSource.add(t, 1 / FPS, { keyFrame: i % 30 === 0 });
     if (i % 4 === 0) opts.onProgress?.(0.05 + (i / total) * 0.9, `Encoding ${Math.floor(t)} / ${Math.ceil(duration)}s`);
   }
@@ -199,6 +207,11 @@ async function exportMediaRecorder(project: Project, duration: number, opts: Exp
     const t = i / FPS;
     const bank = await fillBank(project, t, false);
     renderFrame(ctx, t, project, bank);
+    if (project.clips.some((c) => c.type === "text" && isKitPreset(c.inPreset || c.preset))) {
+      useEditor.getState().setPlayhead(t);
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      await blitKit(ctx, w, h);
+    }
     opts.onProgress?.(i / total, `Encoding ${Math.floor(t)} / ${Math.ceil(duration)}s`);
     await new Promise((r) => setTimeout(r, 1000 / FPS));
   }

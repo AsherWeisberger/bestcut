@@ -94,7 +94,7 @@ export function Inspector({
     window.setTimeout(() => {
       const ed = useEditor.getState();
       if (ed.selectedId === id) ed.setPlaying(false);
-    }, 1200);
+    }, 2400);
   };
 
   const body = (

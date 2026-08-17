@@ -1,6 +1,6 @@
 import { normalizeIn, type Clip, type TextPreset } from "../types";
+import { KIT, kitOf, isKitPreset } from "../kit/catalog";
 import {
-  drawOverlayFx,
   easeOutBack,
   easeOutCubic,
   fillClassic,
@@ -11,126 +11,60 @@ import {
 
 export type { DrawCtx, Kinetic };
 export { easeOutBack, easeOutCubic, prefersReduce, setReduceOverride } from "./overlay-fx";
+export { isKitPreset };
 
-export const OVERLAY_CATS = [
-  {
-    id: "kinetic" as const,
-    name: "Kinetic",
-    items: [
-      { id: "scramble" as TextPreset, name: "Scramble" },
-      { id: "morph" as TextPreset, name: "Morph" },
-      { id: "weight" as TextPreset, name: "Weight" },
-      { id: "typewriter" as TextPreset, name: "Typewriter" },
-      { id: "glitchtext" as TextPreset, name: "Glitch text" },
-      { id: "smoky" as TextPreset, name: "Smoky" },
-      { id: "spotlight" as TextPreset, name: "Spotlight" },
-      { id: "textwave" as TextPreset, name: "Text wave" },
-      { id: "flicker" as TextPreset, name: "Flicker" },
-      { id: "letterswap" as TextPreset, name: "Letter swap" },
-      { id: "charwaves" as TextPreset, name: "Character waves" },
-      { id: "spring" as TextPreset, name: "Spring" },
-      { id: "vaporize" as TextPreset, name: "Vaporize" },
-      { id: "fluidtext" as TextPreset, name: "Fluid text" },
-      { id: "staggerrise" as TextPreset, name: "Stagger rise" },
-      { id: "letterdrop" as TextPreset, name: "Letter drop" },
-      { id: "rolling" as TextPreset, name: "Rolling letters" },
-      { id: "textnoise" as TextPreset, name: "Text noise" },
-      { id: "spiral" as TextPreset, name: "Spiral text" },
-      { id: "letterswing" as TextPreset, name: "Letter swing" },
-      { id: "textwipe" as TextPreset, name: "Text wipe" },
-      { id: "flip" as TextPreset, name: "Mechanical flip" },
-      { id: "appear" as TextPreset, name: "Appear" },
-      { id: "coloursweep" as TextPreset, name: "Colour sweep" },
-      { id: "elastic" as TextPreset, name: "Elastic" },
-      { id: "falling" as TextPreset, name: "Falling" },
-      { id: "emerge" as TextPreset, name: "Text emerge" },
-      { id: "typesequence" as TextPreset, name: "Type sequence" },
-      { id: "gradient" as TextPreset, name: "Gradient text" },
-      { id: "unfold" as TextPreset, name: "Unfold" },
-    ],
-  },
-  {
-    id: "reveals" as const,
-    name: "Reveals",
-    items: [
-      { id: "pixel" as TextPreset, name: "Pixel" },
-      { id: "mask" as TextPreset, name: "Mask" },
-      { id: "brush" as TextPreset, name: "Brush" },
-      { id: "fadeup" as TextPreset, name: "Fade up" },
-      { id: "dither" as TextPreset, name: "Dither" },
-      { id: "focus" as TextPreset, name: "Focus" },
-      { id: "imagefold" as TextPreset, name: "Image fold" },
-      { id: "pixelunfold" as TextPreset, name: "Pixel unfold" },
-      { id: "fluidimage" as TextPreset, name: "Fluid image" },
-      { id: "imageripple" as TextPreset, name: "Image ripple" },
-      { id: "ascii" as TextPreset, name: "Ascii reveal" },
-      { id: "shine" as TextPreset, name: "Shine" },
-    ],
-  },
-  {
-    id: "particles" as const,
-    name: "Particles",
-    items: [
-      { id: "dust" as TextPreset, name: "Dust" },
-      { id: "spark" as TextPreset, name: "Spark" },
-      { id: "vapor" as TextPreset, name: "Vapor" },
-      { id: "starburst" as TextPreset, name: "Star burst" },
-      { id: "glitter" as TextPreset, name: "Glitter" },
-      { id: "tunnel" as TextPreset, name: "Particle tunnel" },
-      { id: "emoji" as TextPreset, name: "Emoji particle" },
-      { id: "stardust" as TextPreset, name: "Stardust" },
-      { id: "snow" as TextPreset, name: "Snow" },
-    ],
-  },
-  {
-    id: "glitch" as const,
-    name: "Glitch",
-    items: [
-      { id: "glitch" as TextPreset, name: "Glitch" },
-      { id: "distort" as TextPreset, name: "Text distortion" },
-      { id: "inkbleed" as TextPreset, name: "Ink bleed" },
-    ],
-  },
-  {
-    id: "gallery" as const,
-    name: "Gallery",
-    items: [{ id: "imagestack" as TextPreset, name: "Image stack" }],
-  },
-  {
-    id: "stickers" as const,
-    name: "Stickers",
-    items: [
-      { id: "neon" as TextPreset, name: "Neon border" },
-      { id: "pill" as TextPreset, name: "Shiny pill" },
-    ],
-  },
+const CAT_ORDER = [
+  { src: "text", id: "kinetic" as const, name: "Kinetic" },
+  { src: "image", id: "reveals" as const, name: "Reveals" },
+  { src: "animation", id: "particles" as const, name: "Particles" },
+  { src: "background-animation", id: "background" as const, name: "Background" },
+  { src: "image-gallery", id: "gallery" as const, name: "Gallery" },
+  { src: "interactive-elements", id: "interactive" as const, name: "Interactive" },
+  { src: "button", id: "buttons" as const, name: "Buttons" },
+  { src: "border", id: "buttons" as const, name: "Buttons" },
+  { src: "cursor", id: "interactive" as const, name: "Interactive" },
 ];
 
-export type OverlayCat = (typeof OVERLAY_CATS)[number]["id"];
+export type OverlayCat = (typeof CAT_ORDER)[number]["id"];
 
-export function overlayItems() {
+function binFor(src: string): { id: OverlayCat; name: string } {
+  const hit = CAT_ORDER.find((c) => c.src === src);
+  return hit ? { id: hit.id, name: hit.name } : { id: "kinetic", name: "Kinetic" };
+}
+
+const names: OverlayCat[] = [];
+const seen = new Set<OverlayCat>();
+for (const c of CAT_ORDER) {
+  if (seen.has(c.id)) continue;
+  seen.add(c.id);
+  names.push(c.id);
+}
+
+export const OVERLAY_CATS = names.map((id) => {
+  const name = CAT_ORDER.find((c) => c.id === id)!.name;
+  const items = KIT.filter((k) => binFor(k.category).id === id).map((k) => ({
+    id: k.id as TextPreset,
+    name: k.name,
+    poster: k.posterUrl,
+  }));
+  return { id, name, items };
+});
+
+export type OverlayItem = { id: TextPreset; name: string; poster?: string; cat: OverlayCat };
+
+export function overlayItems(): OverlayItem[] {
   return OVERLAY_CATS.flatMap((c) => c.items.map((item) => ({ ...item, cat: c.id })));
 }
 
-const REVEAL_SET = new Set<TextPreset>(OVERLAY_CATS.find((c) => c.id === "reveals")!.items.map((i) => i.id));
-const PARTICLE_SET = new Set<TextPreset>(OVERLAY_CATS.find((c) => c.id === "particles")!.items.map((i) => i.id));
-const GLITCH_SET = new Set<TextPreset>(OVERLAY_CATS.find((c) => c.id === "glitch")!.items.map((i) => i.id));
-const GALLERY_SET = new Set<TextPreset>(OVERLAY_CATS.find((c) => c.id === "gallery")!.items.map((i) => i.id));
-const STICKER_SET = new Set<TextPreset>(OVERLAY_CATS.find((c) => c.id === "stickers")!.items.map((i) => i.id));
-const SPECIAL = new Set<TextPreset>(overlayItems().map((i) => i.id));
-
 export function catForPreset(p?: TextPreset): OverlayCat {
   const n = normalizeIn(p);
-  if (REVEAL_SET.has(n)) return "reveals";
-  if (PARTICLE_SET.has(n)) return "particles";
-  if (GLITCH_SET.has(n)) return "glitch";
-  if (GALLERY_SET.has(n)) return "gallery";
-  if (STICKER_SET.has(n)) return "stickers";
+  const kit = kitOf(n);
+  if (kit) return binFor(kit.category).id;
   return "kinetic";
 }
 
 export function isSpecialPreset(p?: TextPreset): boolean {
-  return SPECIAL.has(normalizeIn(p));
+  return isKitPreset(normalizeIn(p));
 }
 
 function covers(c: Clip, t: number) {
@@ -175,7 +109,11 @@ export function kinetic(c: Clip, t: number): Kinetic {
   let weight = 600;
   let scramble = 1;
 
-  if (preset === "fade") {
+  if (isKitPreset(preset)) {
+    opacity = 1;
+    reveal = easeOutCubic(inP);
+    scramble = easeOutCubic(inP);
+  } else if (preset === "fade") {
     opacity = easeOutCubic(inP);
   } else if (preset === "rise" || preset === "fadeup") {
     opacity = easeOutCubic(inP);
@@ -183,7 +121,7 @@ export function kinetic(c: Clip, t: number): Kinetic {
   } else if (preset === "bloom") {
     opacity = Math.min(1, inP * 1.4);
     scale = 0.72 + easeOutBack(inP) * 0.28;
-  } else if (preset === "type" || preset === "typewriter" || preset === "typesequence") {
+  } else if (preset === "type") {
     const typeDur = Math.max(c.inDur ?? 0.45, len * 0.045);
     chars = Math.max(0, Math.floor(len * Math.min(1, lt / typeDur)));
   } else if (preset === "stamp") {
@@ -196,29 +134,10 @@ export function kinetic(c: Clip, t: number): Kinetic {
   } else if (preset === "split") {
     opacity = easeOutCubic(inP);
     split = (1 - easeOutCubic(inP)) * 24;
-  } else if (preset === "scramble" || preset === "letterswap" || preset === "ascii") {
-    scramble = easeOutCubic(inP);
+  } else if (preset === "hold") {
     opacity = 1;
-  } else if (preset === "morph" || preset === "appear" || preset === "unfold" || preset === "elastic" || preset === "flip") {
-    opacity = easeOutCubic(inP);
-    scale = 0.35 + easeOutBack(inP) * 0.65;
-  } else if (preset === "weight") {
-    opacity = easeOutCubic(Math.min(1, inP * 1.35));
-    weight = 200 + easeOutCubic(inP) * 500;
-  } else if (REVEAL_SET.has(preset) || preset === "textwipe" || preset === "emerge" || preset === "inkbleed") {
-    reveal = easeOutCubic(inP);
-    opacity = 1;
-  } else if (PARTICLE_SET.has(preset) || preset === "vaporize") {
-    opacity = easeOutCubic(inP);
-    reveal = easeOutCubic(inP);
-  } else if (preset === "flicker") {
-    opacity = 0.42 + easeOutCubic(inP) * 0.58;
-  } else if (isSpecialPreset(preset)) {
-    opacity = Math.min(1, 0.35 + easeOutCubic(inP) * 0.65);
-    reveal = easeOutCubic(inP);
-    scramble = easeOutCubic(inP);
   } else {
-    opacity = 1;
+    opacity = easeOutCubic(inP);
   }
 
   if (out === "fade") {
@@ -236,19 +155,16 @@ export function kinetic(c: Clip, t: number): Kinetic {
 
 export function drawTitleOverlay(ctx: DrawCtx, c: Clip, t: number, w: number, h: number) {
   if (!covers(c, t) || !c.text) return;
-  const k = kinetic(c, t);
   const preset = normalizeIn(c.inPreset || c.preset);
+  if (isKitPreset(preset)) return;
+  const k = kinetic(c, t);
   ctx.save();
   ctx.globalAlpha *= k.opacity;
   const cx = c.x * w + k.tx;
   const cy = c.y * h + k.ty;
   ctx.translate(cx, cy);
   ctx.scale(k.scale * c.scale, k.scale * c.scale);
-  if (isSpecialPreset(preset) && preset !== "fadeup") {
-    drawOverlayFx(ctx, c, t, w, k);
-  } else {
-    const shown = preset === "type" ? c.text.slice(0, k.chars) : c.text;
-    if (shown) fillClassic(ctx, c, k, w, shown);
-  }
+  const shown = preset === "type" ? c.text.slice(0, k.chars) : c.text;
+  if (shown) fillClassic(ctx, c, k, w, shown);
   ctx.restore();
 }

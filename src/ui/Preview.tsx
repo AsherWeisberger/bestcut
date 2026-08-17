@@ -6,6 +6,7 @@ import { media, sourceTime } from "../engine/media";
 import { PreviewAudio } from "../engine/audio";
 import { renderFrame, visibleMediaClips, type FrameBank } from "../engine/render";
 import { IconPause, IconPlay, IconSplit, IconUndo } from "./icons";
+import { KitLayer } from "../kit/KitLayer";
 
 const audio = new PreviewAudio();
 
@@ -225,6 +226,7 @@ export function Preview({ onExport }: { onExport?: () => void }) {
           }
         >
           <canvas ref={canvasRef} width={size.w} height={size.h} />
+          <KitLayer />
           {safeOn && (
             <div className="safe-zone" aria-hidden>
               <i className="safe-top" style={{ height: `${plat.safe.top * 100}%` }} />

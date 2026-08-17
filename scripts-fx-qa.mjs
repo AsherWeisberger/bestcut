@@ -23,7 +23,7 @@ async function litPreview(page) {
     }
     const clips = [...document.querySelectorAll(".clip.text")].length;
     const fx = !!document.querySelector("[data-fx-bin='1']");
-    const scramble = !!document.querySelector("[data-fx='scramble']");
+    const scramble = !!document.querySelector("[data-fx='scrambletext']");
     return { n, clips, fx, scramble, w: width, h: height };
   });
 }
@@ -32,15 +32,16 @@ async function litPreview(page) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
   const page = await ctx.newPage();
   await page.goto(base, { waitUntil: "networkidle", timeout: 45000 });
-  await page.locator("[data-fx='scramble']").first().waitFor({ timeout: 25000 });
+  await page.locator("[data-fx='scrambletext']").first().waitFor({ timeout: 25000 });
   await page.getByText("Kinetic", { exact: true }).first().waitFor();
   await page.getByText("Reveals", { exact: true }).first().waitFor();
   await page.getByText("Particles", { exact: true }).first().waitFor();
-  await page.getByText("Glitch", { exact: true }).first().waitFor();
-  await page.getByText("Stickers", { exact: true }).first().waitFor();
+  await page.getByText("Background", { exact: true }).first().waitFor();
+  await page.getByText("Gallery", { exact: true }).first().waitFor();
+  await page.getByText("Buttons", { exact: true }).first().waitFor();
   const selected = await page.evaluate(() => document.querySelectorAll(".clip.on").length);
   if (selected) throw new Error("expected no clip selected on fresh load");
-  await page.locator("[data-fx='scramble']").first().click();
+  await page.locator("[data-fx='scrambletext']").first().click();
   await page.locator(".clip.text").first().waitFor({ timeout: 10000 });
   await page.waitForTimeout(500);
   const stats = await litPreview(page);
@@ -64,7 +65,7 @@ async function litPreview(page) {
     await p.locator(".dock").getByText("FX", { exact: true }).click();
   }
   await sheet.waitFor({ state: "visible", timeout: 12000 });
-  await p.locator(".fx-sheet [data-fx='scramble']").waitFor({ timeout: 12000 });
+  await p.locator(".fx-sheet [data-fx='scrambletext']").waitFor({ timeout: 12000 });
   const rail = p.locator(".fx-sheet .cat-rail").first();
   await rail.scrollIntoViewIfNeeded();
   const dock = p.locator(".dock");
@@ -82,10 +83,10 @@ async function litPreview(page) {
   if (railBox.height < 28) throw new Error("FX rail collapsed to " + railBox.height);
   const cats = await p.locator(".fx-sheet .cat-rail button").allTextContents();
   console.log("phone cats", cats);
-  if (!cats.includes("Kinetic") || !cats.includes("Reveals") || !cats.includes("Particles")) {
+  if (!cats.includes("Kinetic") || !cats.includes("Reveals") || !cats.includes("Particles") || !cats.includes("Background")) {
     throw new Error("FX categories missing from phone rail: " + cats.join(","));
   }
-  await p.locator(".fx-sheet [data-fx='scramble']").click();
+  await p.locator(".fx-sheet [data-fx='scrambletext']").click();
   await p.locator(".clip.text").first().waitFor({ timeout: 10000 });
   await p.waitForTimeout(500);
   const stats = await litPreview(p);
