@@ -22,6 +22,7 @@ import { persistAsset, persistProject } from "./db";
 import { ingestFile, media } from "./engine/media";
 import { rangeSpeedPieces, replaceClipWithPieces, setClipSpeedResult } from "./engine/speed";
 import { snapTime } from "./engine/snap";
+import { catForPreset } from "./engine/overlays";
 
 function clone<T>(x: T): T {
   return JSON.parse(JSON.stringify(x));
@@ -388,6 +389,9 @@ export const useEditor = create<Editor>((set, get) => ({
   addText(preset = "scramble") {
     get().push();
     const { project, playhead } = get();
+    const cat = catForPreset(preset);
+    const y = cat === "stickers" ? 0.78 : cat === "gallery" ? 0.5 : 0.38;
+    const fontSize = cat === "stickers" ? 48 : cat === "gallery" ? 64 : 92;
     const clip = blankClip({
       trackId: "trk_ov",
       type: "text",
@@ -396,8 +400,8 @@ export const useEditor = create<Editor>((set, get) => ({
       text: "BESTCUT",
       preset,
       inPreset: preset,
-      y: 0.38,
-      fontSize: 92,
+      y,
+      fontSize,
       textFace: "fraunces",
     });
     const next = { ...project, clips: [...project.clips, clip] };

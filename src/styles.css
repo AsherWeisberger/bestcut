@@ -89,6 +89,7 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 .cat-rail {
   display: flex; gap: 0; overflow-x: auto; scrollbar-width: none;
   border-bottom: 1px solid var(--line); margin: 0 -4px 4px;
+  flex-wrap: nowrap; -webkit-overflow-scrolling: touch;
 }
 .cat-rail::-webkit-scrollbar { display: none; }
 .cat-rail button {
@@ -685,8 +686,11 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   .byline { display: none; }
   .plat-tab { padding: 5px 7px; font-size: 9px; letter-spacing: 0.03em; }
   .cta { padding: 6px 9px; font-size: 11px; }
-  .cat-rail button { padding: 7px 8px; font-size: 9px; }
+  .cat-rail button { padding: 8px 9px; font-size: 10px; letter-spacing: 0.06em; }
+  .style-grid.tight { grid-template-columns: 1fr 1fr; }
+  .title-grid { gap: 6px; }
 }
+
 
 
 .orb-pill.dark { background: #0D0F14; }

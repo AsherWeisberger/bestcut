@@ -32,8 +32,10 @@ function TitleTile({ preset, name, onPick }: { preset: TextPreset; name: string;
       inDur: 0.38,
       outDur: 0.18,
     });
+    const reduced =
+      typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     const paint = (now: number) => {
-      const t = ((now - t0) / 1000) % 1.4;
+      const t = reduced ? 0.9 : ((now - t0) / 1000) % 1.4;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = "#0D0F14";
       ctx.fillRect(0, 0, 120, 68);
@@ -42,6 +44,7 @@ function TitleTile({ preset, name, onPick }: { preset: TextPreset; name: string;
     const loop = (now: number) => {
       if (!vis) return;
       paint(now);
+      if (reduced) return;
       raf = requestAnimationFrame(loop);
     };
     const io =

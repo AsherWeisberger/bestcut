@@ -36,6 +36,12 @@ export function App() {
     let alive = true;
     const deadline = Date.now() + 14000;
     (async () => {
+      if (location.search.includes("overlayqa=1")) {
+        const { runOverlayQa } = await import("./overlay-qa");
+        hydrate(emptyProject(), []);
+        await runOverlayQa();
+        return;
+      }
       await afterPaint();
       try {
         const saved = await Promise.race([

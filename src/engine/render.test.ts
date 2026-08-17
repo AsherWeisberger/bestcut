@@ -97,4 +97,24 @@ describe("kinetic titles", () => {
     expect(kinetic(mk("brush"), 1.2).reveal).toBe(1);
     expect(kinetic(mk("dust"), early).reveal).toBeLessThan(1);
   });
+
+  test("ported looks still have an in pose that settles", () => {
+    const mk = (preset: "glitchtext" | "dither" | "starburst" | "inkbleed" | "neon") =>
+      blankClip({
+        trackId: "trk_ov",
+        type: "text",
+        start: 0,
+        duration: 2,
+        text: "BESTCUT",
+        preset,
+        inPreset: preset,
+        inDur: 0.38,
+        outDur: 0.28,
+      });
+    expect(kinetic(mk("glitchtext"), 0.08).inP).toBeLessThan(0.4);
+    expect(kinetic(mk("dither"), 0.08).reveal).toBeLessThan(0.6);
+    expect(kinetic(mk("starburst"), 0.08).reveal).toBeLessThan(1);
+    expect(kinetic(mk("inkbleed"), 1.2).reveal).toBe(1);
+    expect(kinetic(mk("neon"), 1.2).opacity).toBeGreaterThan(0.8);
+  });
 });
