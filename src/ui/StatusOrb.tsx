@@ -165,16 +165,24 @@ export function OrbDot({
   return <OrbCanvas state={state} theme={theme} size={CSS_SIZE} />;
 }
 
+function compactLabel(label: string) {
+  const s = label.replace(/\s+/g, " ").trim();
+  if (s.length <= 16) return s;
+  return s.slice(0, 14).trimEnd() + "…";
+}
+
 export function StatusOrb({
   label,
   state = "working",
   tone,
   className = "",
+  island = false,
 }: {
   label: string;
   state?: StatusOrbState;
   tone?: StatusOrbTone;
   className?: string;
+  island?: boolean;
 }) {
   const [scheme, setScheme] = useState<StatusOrbTone>(() => tone || readHostTone());
 
@@ -190,12 +198,15 @@ export function StatusOrb({
     return () => mq.removeEventListener("change", apply);
   }, [tone]);
 
-  return (
-    <span className={"orb-pill " + scheme + (className ? " " + className : "")} data-theme={scheme} role="status">
+  const text = island ? compactLabel(label) : label;
+  const pill = (
+    <span className={"orb-pill " + scheme + (island ? " island" : "") + (className ? " " + className : "")} data-theme={scheme} role="status">
       <span className="orb-dot" aria-hidden="true">
         <OrbDot state={state} theme={scheme} />
       </span>
-      <span className="orb-label">{label}</span>
+      <span className="orb-label">{text}</span>
     </span>
   );
+  if (!island) return pill;
+  return <div className="island-slot">{pill}</div>;
 }

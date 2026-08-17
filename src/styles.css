@@ -637,30 +637,59 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 }
 
 
-.empty .orb-pill { margin-top: 16px; }
-.sheet-card .orb-pill { margin: 10px 0; }
-
-.orb-pill.dark { background: rgba(13, 15, 20, 0.92); }
-.orb-pill.light { background: rgba(240, 239, 236, 0.94); }
-.boot {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  place-items: center;
-  padding: 24px 18px;
-}
-.boot .orb-pill { margin: 0; }
+.orb-pill.dark { background: #0D0F14; }
+.orb-pill.light { background: #F0EFEC; }
 .orb-dot { contain: strict; }
-.orb-phone-only { display: none; }
-@media (max-width: 720px) {
-  .orb-phone-only { display: inline-flex; }
-  .orb-desk-only { display: none !important; }
-  .orb-dock {
-    position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
-    top: auto;
-    bottom: calc(var(--dock-h, 72px) + env(safe-area-inset-bottom, 0px) + 10px);
-    z-index: 40;
+
+/* Dynamic Island-style status: compact expanding pill under the notch. */
+.island-slot {
+  position: fixed;
+  z-index: 50;
+  left: 50%;
+  top: max(8px, calc(env(safe-area-inset-top, 0px) + 6px));
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: island-pop 0.34s var(--ease) both;
+}
+.island-slot .orb-pill {
+  height: 32px;
+  max-width: 32px;
+  padding: 0 6px;
+  gap: 0;
+  overflow: hidden;
+  background: #0D0F14;
+  color: #F0EFEC;
+  box-shadow: inset 0 0 0 1px #575860, 0 10px 28px rgba(0, 0, 0, 0.38);
+  animation: island-expand 0.56s var(--ease) 0.08s both;
+}
+.island-slot .orb-label {
+  font-size: 12px;
+  min-width: 0;
+}
+@keyframes island-pop {
+  from { transform: translateX(-50%) scale(0.88); opacity: 0; }
+  to { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+@keyframes island-expand {
+  0%, 28% { max-width: 32px; padding-right: 6px; gap: 0; }
+  100% { max-width: min(72vw, 220px); padding-right: 12px; gap: 6px; }
+}
+@media (max-width: 390px) {
+  .island-slot .orb-pill { height: 32px; }
+}
+@media (max-width: 959px), (display-mode: standalone) {
+  .island-slot {
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+  }
+}
+@media (display-mode: standalone) {
+  .app { padding-top: env(safe-area-inset-top, 0px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .island-slot, .island-slot .orb-pill { animation: none; }
+  .island-slot .orb-pill {
+    max-width: min(72vw, 220px);
+    padding-right: 12px;
+    gap: 6px;
   }
 }

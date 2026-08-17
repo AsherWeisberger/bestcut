@@ -56,16 +56,11 @@ export function CaptionPass({ onClose }: { onClose: () => void }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        {busy ? (
-          <StatusOrb label={label || "Transcribing"} state="listening" tone="dark" />
-        ) : (
-          <>
-            <div className="progress">
-              <i style={{ width: `${Math.round(progress * 100)}%` }} />
-            </div>
-            <p className="hint">{label}</p>
-          </>
-        )}
+        {busy && <StatusOrb island label={label || "Captions"} state="listening" tone="dark" />}
+        <div className="progress">
+          <i style={{ width: `${Math.round(progress * 100)}%` }} />
+        </div>
+        <p className="hint">{label}</p>
         <div className="row" style={{ marginTop: 10 }}>
           <button className="ghost" onClick={distribute} disabled={!text.trim() || busy}>
             Distribute on the voice clip
