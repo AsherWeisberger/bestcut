@@ -3,6 +3,7 @@ import { useEditor } from "../store";
 import { splitSentences, srtToClips } from "../engine/captions";
 import { clipEnd } from "../types";
 import { autoCaption } from "../engine/asr";
+import { StatusOrb } from "./StatusOrb";
 
 export function CaptionPass({ onClose }: { onClose: () => void }) {
   const project = useEditor((s) => s.project);
@@ -55,10 +56,16 @@ export function CaptionPass({ onClose }: { onClose: () => void }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        <div className="progress">
-          <i style={{ width: `${Math.round(progress * 100)}%` }} />
-        </div>
-        <p className="hint">{label}</p>
+        {busy ? (
+          <StatusOrb label={label || "Transcribing"} state="listening" tone="dark" />
+        ) : (
+          <>
+            <div className="progress">
+              <i style={{ width: `${Math.round(progress * 100)}%` }} />
+            </div>
+            <p className="hint">{label}</p>
+          </>
+        )}
         <div className="row" style={{ marginTop: 10 }}>
           <button className="ghost" onClick={distribute} disabled={!text.trim() || busy}>
             Distribute on the voice clip

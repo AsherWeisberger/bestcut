@@ -3,6 +3,7 @@ import { useEditor } from "../store";
 import { ASPECT_SIZE } from "../types";
 import { captionsToSrt } from "../engine/captions";
 import { exportProject, probeCodecs, type CodecSupport, type ExportFormat } from "../engine/export";
+import { StatusOrb } from "./StatusOrb";
 
 export function ExportSheet({ onClose }: { onClose: () => void }) {
   const project = useEditor((s) => s.project);
@@ -92,10 +93,16 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
             <span className={`pill ${support.opus ? "ok" : "no"}`}>Opus {support.opus ? "yes" : "no"}</span>
           </div>
         )}
-        <div className="progress">
-          <i style={{ width: `${Math.round(progress * 100)}%` }} />
-        </div>
-        <p className="hint">{label}</p>
+        {busy ? (
+          <StatusOrb label={label || "Encoding"} state="weaving" tone="dark" />
+        ) : (
+          <>
+            <div className="progress">
+              <i style={{ width: `${Math.round(progress * 100)}%` }} />
+            </div>
+            <p className="hint">{label}</p>
+          </>
+        )}
         <div className="row" style={{ marginTop: 12 }}>
           <button
             className="ghost"

@@ -5,6 +5,7 @@ import { ingestFile } from "./engine/media";
 import { loadAllAssets, loadProject, type AssetRow } from "./db";
 import { EmptyState } from "./ui/EmptyState";
 import { Editor } from "./ui/Editor";
+import { StatusOrb } from "./ui/StatusOrb";
 
 export function App() {
   const hydrating = useEditor((s) => s.hydrating);
@@ -60,7 +61,7 @@ export function App() {
   if (hydrating) {
     return (
       <div className="empty">
-        <div className="kicker">BestCut</div>
+        <StatusOrb label="Loading" state="connecting" tone="dark" />
       </div>
     );
   }
