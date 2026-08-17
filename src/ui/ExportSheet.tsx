@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { ASPECT_SIZE } from "../types";
+import { exportFileBase, exportLabel, resolvePlatform } from "../platforms";
 import { captionsToSrt } from "../engine/captions";
 import { exportProject, probeCodecs, type CodecSupport, type ExportFormat } from "../engine/export";
 import { StatusOrb } from "./StatusOrb";
@@ -16,6 +17,7 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
   const [done, setDone] = useState(false);
   const abortRef = useRef(new AbortController());
   const size = ASPECT_SIZE[project.aspect];
+  const plat = resolvePlatform(project);
 
   useEffect(() => {
     probeCodecs().then((s) => {
@@ -47,7 +49,7 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       const ext = blob.type.includes("mp4") ? "mp4" : "webm";
-      a.download = `${project.name.replace(/\s+/g, "-") || "bestcut"}.${ext}`;
+      a.download = `${exportFileBase(project)}.${ext}`;
       a.click();
       setLabel("Saved — play it on device.");
       setProgress(1);
@@ -72,10 +74,8 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
     <div className="modal sheet-modal" onClick={onClose}>
       <div className="card sheet-card" onClick={(e) => e.stopPropagation()}>
         <h2>Export</h2>
-        <p className="lead-line">1080 · 30fps · no watermark · same as preview</p>
-        <p className="hint">
-          {size.w}×{size.h} from the top bar. Bytes stay here.
-        </p>
+        <p className="lead-line">{exportLabel(project)} · {size.w}×{size.h} · 30fps · same as preview</p>
+        <p className="hint">{plat.spec.hint}. Bytes stay here.</p>
         <div className="seg">
           <button className={format === "mp4" ? "on" : ""} onClick={() => setFormat("mp4")} disabled={busy}>
             MP4

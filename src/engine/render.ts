@@ -2,11 +2,10 @@ import {
   ASPECT_SIZE,
   type Clip,
   type Project,
-  type TextPreset,
   clipEnd,
-  normalizeIn,
   projectDuration,
 } from "../types";
+import { drawTitleOverlay } from "./overlays";
 
 export type DrawCtx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -98,71 +97,7 @@ function starPath(ctx: DrawCtx, cx: number, cy: number, r: number, points = 5) {
   ctx.closePath();
 }
 
-export type Kinetic = {
-  opacity: number;
-  ty: number;
-  tx: number;
-  scale: number;
-  chars: number;
-  split: number;
-};
-
-export function kinetic(c: Clip, t: number): Kinetic {
-  const lt = Math.max(0, localT(c, t));
-  const inDur = Math.max(0.12, c.inDur ?? 0.38);
-  const outDur = Math.max(0.12, c.outDur ?? 0.28);
-  const outStart = Math.max(0, c.duration - outDur);
-  const inP = Math.min(1, lt / inDur);
-  const outP = lt > outStart ? Math.min(1, (lt - outStart) / outDur) : 0;
-  const preset = normalizeIn(c.inPreset || c.preset);
-  const out = c.outPreset || "fade";
-  const len = c.text.length;
-  let opacity = 1;
-  let ty = 0;
-  let tx = 0;
-  let scale = 1;
-  let chars = len;
-  let split = 0;
-
-  if (preset === "fade") {
-    opacity = easeOutCubic(inP);
-  } else if (preset === "rise") {
-    opacity = easeOutCubic(inP);
-    ty = (1 - easeOutCubic(inP)) * 36;
-  } else if (preset === "bloom") {
-    opacity = Math.min(1, inP * 1.4);
-    scale = 0.72 + easeOutBack(inP) * 0.28;
-  } else if (preset === "type") {
-    const typeDur = Math.max(c.inDur ?? 0.45, len * 0.045);
-    chars = Math.max(0, Math.floor(len * Math.min(1, lt / typeDur)));
-  } else if (preset === "stamp") {
-    const sp = Math.min(1, lt / 0.16);
-    opacity = sp > 0 ? 1 : 0;
-    scale = 1.12 - easeOutCubic(sp) * 0.12;
-  } else if (preset === "drift") {
-    opacity = easeOutCubic(inP);
-    tx = (1 - easeOutCubic(inP)) * 40;
-  } else if (preset === "split") {
-    opacity = easeOutCubic(inP);
-    split = (1 - easeOutCubic(inP)) * 24;
-  } else {
-    /* hold — hard cut in */
-    opacity = 1;
-  }
-
-  if (out === "fade") {
-    opacity *= 1 - outP;
-  } else if (out === "sink") {
-    opacity *= 1 - outP;
-    ty += outP * 12;
-  } else if (out === "scale") {
-    opacity *= 1 - outP * 0.85;
-    scale *= 1 - outP * 0.12;
-  }
-  /* hold out: no change */
-
-  return { opacity, ty, tx, scale, chars, split };
-}
+export { kinetic } from "./overlays";
 
 function wrapText(ctx: DrawCtx, text: string, maxW: number, maxLines = 6): string[] {
   const words = text.split(/\s+/);
@@ -179,47 +114,8 @@ function wrapText(ctx: DrawCtx, text: string, maxW: number, maxLines = 6): strin
   return lines.slice(0, maxLines);
 }
 
-function faceFont(c: Clip, size: number, weight = 600) {
-  const face = c.textFace === "sora" ? "Sora, system-ui, sans-serif" : "Fraunces, Georgia, serif";
-  return `${weight} ${size}px ${face}`;
-}
-
 export function drawTextClip(ctx: DrawCtx, c: Clip, t: number, w: number, h: number) {
-  if (!covers(c, t) || !c.text) return;
-  const k = kinetic(c, t);
-  const preset = normalizeIn(c.inPreset || c.preset);
-  const shown = preset === "type" ? c.text.slice(0, k.chars) : c.text;
-  if (!shown) return;
-  ctx.save();
-  ctx.globalAlpha *= k.opacity;
-  const cx = c.x * w + k.tx;
-  const cy = c.y * h + k.ty;
-  ctx.translate(cx, cy);
-  ctx.scale(k.scale * c.scale, k.scale * c.scale);
-  ctx.fillStyle = c.color;
-  ctx.textBaseline = "middle";
-  ctx.font = faceFont(c, c.fontSize, 600);
-  ctx.shadowColor = "rgba(13,15,20,0.55)";
-  ctx.shadowBlur = 18;
-
-  if (preset === "split" && k.split > 0.2) {
-    ctx.textAlign = "left";
-    const mid = Math.max(1, Math.ceil(shown.length / 2));
-    const left = shown.slice(0, mid);
-    const right = shown.slice(mid);
-    const totalW = ctx.measureText(shown).width;
-    const leftW = ctx.measureText(left).width;
-    const x0 = -totalW / 2;
-    ctx.fillText(left, x0 - k.split, 0);
-    ctx.fillText(right, x0 + leftW + k.split, 0);
-  } else {
-    ctx.textAlign = "center";
-    const lines = wrapText(ctx, shown, w * 0.86, 4);
-    const lh = c.fontSize * 1.12;
-    const top = -((lines.length - 1) * lh) / 2;
-    lines.forEach((ln, i) => ctx.fillText(ln, 0, top + i * lh));
-  }
-  ctx.restore();
+  drawTitleOverlay(ctx, c, t, w, h);
 }
 
 function captionWords(c: Clip): { t: number; w: string }[] {

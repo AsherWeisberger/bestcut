@@ -1,10 +1,9 @@
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useEditor } from "../store";
 import { srtToClips } from "../engine/captions";
 import {
   CAPTION_STYLES,
   SPEEDS,
-  TITLE_INS,
   TITLE_OUTS,
   TRANSITIONS,
   clipSpeed,
@@ -16,6 +15,7 @@ import {
   type TextPreset,
   type TransitionKind,
 } from "../types";
+import { OVERLAY_CATS, catForPreset, type OverlayCat } from "../engine/overlays";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -79,7 +79,14 @@ export function Inspector({
   const taRef = useRef<HTMLTextAreaElement>(null);
   const clip = project.clips.find((c) => c.id === selectedId);
   const captions = project.clips.filter((c) => c.type === "caption").sort((a, b) => a.start - b.start);
+  const [overlayCat, setOverlayCat] = useState<OverlayCat | null>(null);
+  const derivedCat = clip?.type === "text" ? catForPreset(clip.inPreset || clip.preset) : "kinetic";
+  const catId = overlayCat ?? derivedCat;
   const header = clip ? clip.type.toUpperCase() : "INSPECTOR";
+
+  useEffect(() => {
+    setOverlayCat(null);
+  }, [selectedId]);
 
   const pulseTitle = (id: string, start: number) => {
     setPlayhead(start);
@@ -258,14 +265,28 @@ export function Inspector({
                   </div>
                 </Section>
                 <Section title="Motion">
+                  <div className="cat-rail" role="tablist" aria-label="Overlay look">
+                    {OVERLAY_CATS.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        role="tab"
+                        className={(catId === cat.id ? "on" : "")}
+                        onClick={() => setOverlayCat(cat.id)}
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
                   <label className="micro">In</label>
                   <div className="style-grid tight">
-                    {TITLE_INS.map((p) => (
+                    {(OVERLAY_CATS.find((c) => c.id === catId) || OVERLAY_CATS[0]).items.map((p) => (
                       <button
                         key={p.id}
                         className={(clip.inPreset || clip.preset) === p.id ? "style-tile on" : "style-tile"}
                         onClick={() => {
                           updateClip(clip.id, { inPreset: p.id as TextPreset, preset: p.id as TextPreset });
+                          setOverlayCat(catForPreset(p.id));
                           pulseTitle(clip.id, clip.start);
                         }}
                       >

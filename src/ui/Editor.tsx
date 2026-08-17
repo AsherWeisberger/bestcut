@@ -6,6 +6,7 @@ import { Inspector } from "./Inspector";
 import { ExportSheet } from "./ExportSheet";
 import { CaptionPass } from "./CaptionPass";
 import { Bin } from "./Bin";
+import { PlatformBar } from "./PlatformBar";
 import {
   IconAa,
   IconCc,
@@ -63,7 +64,6 @@ export function Editor() {
   const assets = useEditor((s) => s.assets);
   const selectedId = useEditor((s) => s.selectedId);
   const debug = useEditor((s) => s.debug);
-  const setAspect = useEditor((s) => s.setAspect);
   const importFiles = useEditor((s) => s.importFiles);
   const addText = useEditor((s) => s.addText);
   const splitAtPlayhead = useEditor((s) => s.splitAtPlayhead);
@@ -227,14 +227,7 @@ export function Editor() {
             <span className="who">Made by Asher Weisberger · </span>@AsherWeisberger
           </a>
         </div>
-        <div className="top-spacer" />
-        <div className="seg" role="tablist" aria-label="Aspect">
-          {(["9:16", "1:1", "16:9"] as const).map((a) => (
-            <button key={a} className={project.aspect === a ? "on" : ""} onClick={() => setAspect(a)}>
-              {a}
-            </button>
-          ))}
-        </div>
+        <PlatformBar />
         {debug && (
           <button className="ghost desk-only" onClick={downloadJson} title="Download project JSON">
             JSON

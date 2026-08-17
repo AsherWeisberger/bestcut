@@ -1,11 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
-import { blankClip, TITLE_INS, TRANSITIONS, type TextPreset, type TransitionKind } from "../types";
+import { blankClip, TRANSITIONS, type TextPreset, type TransitionKind } from "../types";
 import { ensureThumb } from "../engine/media";
-import { kinetic } from "../engine/render";
+import { OVERLAY_CATS, drawTitleOverlay, type OverlayCat } from "../engine/overlays";
 import { fmtTime } from "../types";
 
-function TitleTile({ preset, onPick }: { preset: TextPreset; onPick: () => void }) {
+function TitleTile({ preset, name, onPick }: { preset: TextPreset; name: string; onPick: () => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = ref.current;
@@ -16,6 +16,7 @@ function TitleTile({ preset, onPick }: { preset: TextPreset; onPick: () => void 
     if (!ctx) return;
     let raf = 0;
     let t0 = performance.now();
+    let vis = true;
     const clip = blankClip({
       trackId: "trk_ov",
       type: "text",
@@ -31,32 +32,34 @@ function TitleTile({ preset, onPick }: { preset: TextPreset; onPick: () => void 
       inDur: 0.38,
       outDur: 0.18,
     });
-    const loop = (now: number) => {
+    const paint = (now: number) => {
       const t = ((now - t0) / 1000) % 1.4;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = "#0D0F14";
       ctx.fillRect(0, 0, 120, 68);
-      const k = kinetic(clip, t);
-      ctx.save();
-      ctx.globalAlpha = k.opacity;
-      ctx.translate(60 + k.tx, 36 + k.ty);
-      ctx.scale(k.scale, k.scale);
-      ctx.fillStyle = "#F0EFEC";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = "600 28px Fraunces, Georgia, serif";
-      const shown = preset === "type" ? "Aa".slice(0, k.chars) : "Aa";
-      if (preset === "split" && k.split > 0.2) {
-        ctx.fillText("A", -8 - k.split, 0);
-        ctx.fillText("a", 8 + k.split, 0);
-      } else if (shown) ctx.fillText(shown, 0, 0);
-      ctx.restore();
+      drawTitleOverlay(ctx, clip, t, 120, 68);
+    };
+    const loop = (now: number) => {
+      if (!vis) return;
+      paint(now);
       raf = requestAnimationFrame(loop);
     };
+    const io =
+      "IntersectionObserver" in window
+        ? new IntersectionObserver((entries) => {
+            vis = !!(entries[0] && entries[0].isIntersecting);
+            if (vis) raf = requestAnimationFrame(loop);
+            else if (raf) cancelAnimationFrame(raf);
+          })
+        : null;
+    if (io) io.observe(canvas);
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      vis = false;
+      cancelAnimationFrame(raf);
+      if (io) io.disconnect();
+    };
   }, [preset]);
-  const name = TITLE_INS.find((t) => t.id === preset)?.name || preset;
   return (
     <button className="title-tile" onClick={onPick}>
       <canvas ref={ref} width={120} height={68} />
@@ -121,6 +124,8 @@ export function Bin({
   const setTransition = useEditor((s) => s.setTransition);
   const selectedId = useEditor((s) => s.selectedId);
   const list = Object.values(assets);
+  const [titleCat, setTitleCat] = useState<OverlayCat>("kinetic");
+  const titleItems = (OVERLAY_CATS.find((c) => c.id === titleCat) || OVERLAY_CATS[0]).items;
 
   return (
     <aside className="bin">
@@ -155,11 +160,25 @@ export function Bin({
           </>
         )}
         {binTab === "titles" && (
-          <div className="title-grid">
-            {TITLE_INS.map((p) => (
-              <TitleTile key={p.id} preset={p.id as TextPreset} onPick={() => addText(p.id)} />
-            ))}
-          </div>
+          <>
+            <div className="cat-rail" role="tablist" aria-label="Title look">
+              {OVERLAY_CATS.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={titleCat === cat.id ? "on" : ""}
+                  onClick={() => setTitleCat(cat.id)}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+            <div className="title-grid">
+              {titleItems.map((p) => (
+                <TitleTile key={p.id} preset={p.id} name={p.name} onPick={() => addText(p.id)} />
+              ))}
+            </div>
+          </>
         )}
         {binTab === "captions" && (
           <>

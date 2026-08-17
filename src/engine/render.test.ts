@@ -72,4 +72,29 @@ describe("kinetic titles", () => {
     expect(poses.find((p) => p.preset === "bloom")?.k.scale).toBeLessThan(1);
     expect(poses.find((p) => p.preset === "type")?.k.chars).toBeLessThan("BESTCUT".length);
   });
+
+  test("scramble morph weight typewriter pixel and dust have distinct in poses", () => {
+    const mk = (preset: "scramble" | "morph" | "weight" | "typewriter" | "pixel" | "mask" | "brush" | "dust") =>
+      blankClip({
+        trackId: "trk_ov",
+        type: "text",
+        start: 0,
+        duration: 2,
+        text: "BESTCUT",
+        preset,
+        inPreset: preset,
+        inDur: 0.38,
+        outDur: 0.28,
+      });
+    const early = 0.08;
+    expect(kinetic(mk("scramble"), early).scramble).toBeLessThan(1);
+    expect(kinetic(mk("scramble"), 1.2).scramble).toBe(1);
+    expect(kinetic(mk("morph"), early).scale).toBeLessThan(1);
+    expect(kinetic(mk("weight"), early).weight).toBeLessThan(500);
+    expect(kinetic(mk("typewriter"), early).chars).toBeLessThan("BESTCUT".length);
+    expect(kinetic(mk("pixel"), early).reveal).toBeLessThan(0.6);
+    expect(kinetic(mk("mask"), early).reveal).toBeLessThan(0.6);
+    expect(kinetic(mk("brush"), 1.2).reveal).toBe(1);
+    expect(kinetic(mk("dust"), early).reveal).toBeLessThan(1);
+  });
 });

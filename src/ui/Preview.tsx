@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { ASPECT_SIZE, clipEnd, clipSpeed, fmtTime, projectDuration, type Project } from "../types";
+import { resolvePlatform } from "../platforms";
 import { useEditor, watchPlayhead } from "../store";
 import { media, sourceTime } from "../engine/media";
 import { PreviewAudio } from "../engine/audio";
@@ -71,6 +72,7 @@ export function Preview({ onExport }: { onExport?: () => void }) {
   const selected = project.clips.find((c) => c.id === selectedId);
   const safeOn = selected?.type === "text" || selected?.type === "caption";
   const vertical = size.h >= size.w;
+  const plat = resolvePlatform(project);
 
   useEffect(() => {
     if (useEditor.getState().playing) return;
@@ -211,6 +213,11 @@ export function Preview({ onExport }: { onExport?: () => void }) {
       <div className="preview-stage">
         <div
           className="stage-frame"
+          data-platform={plat.spec.id}
+          data-format={plat.format.id}
+          data-aspect={project.aspect}
+          data-export-w={size.w}
+          data-export-h={size.h}
           style={
             vertical
               ? { aspectRatio: `${size.w} / ${size.h}`, height: "100%", width: "auto", maxWidth: "100%" }
@@ -220,8 +227,10 @@ export function Preview({ onExport }: { onExport?: () => void }) {
           <canvas ref={canvasRef} width={size.w} height={size.h} />
           {safeOn && (
             <div className="safe-zone" aria-hidden>
-              <i className="safe-top" />
-              <i className="safe-bot" />
+              <i className="safe-top" style={{ height: `${plat.safe.top * 100}%` }} />
+              <i className="safe-bot" style={{ height: `${plat.safe.bottom * 100}%` }} />
+              <i className="safe-side left" style={{ width: `${plat.safe.left * 100}%` }} />
+              <i className="safe-side right" style={{ width: `${plat.safe.right * 100}%` }} />
             </div>
           )}
         </div>

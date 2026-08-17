@@ -17,6 +17,7 @@ import {
   type TextPreset,
   type TransitionKind,
 } from "./types";
+import { formatOf, platformById, type PlatformId } from "./platforms";
 import { persistAsset, persistProject } from "./db";
 import { ingestFile, media } from "./engine/media";
 import { rangeSpeedPieces, replaceClipWithPieces, setClipSpeedResult } from "./engine/speed";
@@ -79,6 +80,7 @@ type Editor = {
   setZoom: (z: number) => void;
   fitZoom: (lanePx: number) => void;
   setAspect: (a: Aspect) => void;
+  setPlatform: (platform: PlatformId, formatId?: string) => void;
   select: (id: string | null) => void;
   setSnap: (v: boolean) => void;
   setRipple: (v: boolean) => void;
@@ -211,6 +213,14 @@ export const useEditor = create<Editor>((set, get) => ({
   setAspect(a) {
     get().push();
     const project = { ...get().project, aspect: a };
+    set({ project });
+    schedulePersist(project);
+  },
+  setPlatform(platform, formatId) {
+    get().push();
+    const spec = platformById(platform);
+    const fmt = formatOf(spec, formatId || spec.defaultFormat);
+    const project = { ...get().project, platform, formatId: fmt.id, aspect: fmt.aspect };
     set({ project });
     schedulePersist(project);
   },
@@ -375,7 +385,7 @@ export const useEditor = create<Editor>((set, get) => ({
     schedulePersist(project);
   },
 
-  addText(preset = "rise") {
+  addText(preset = "scramble") {
     get().push();
     const { project, playhead } = get();
     const clip = blankClip({
@@ -616,7 +626,15 @@ export const useEditor = create<Editor>((set, get) => ({
       ...p,
       magnetic: p.magnetic !== false,
       tracks: p.tracks?.length ? p.tracks : emptyProject().tracks,
+      platform: p.platform || (p.aspect === "16:9" ? "youtube" : p.aspect === "1:1" ? "facebook" : p.aspect === "4:5" ? "instagram" : "tiktok"),
+      formatId:
+        p.formatId ||
+        (p.aspect === "16:9" ? "long" : p.aspect === "1:1" ? "square" : p.aspect === "4:5" ? "feed" : "vertical"),
     };
+    if (!p.platform && p.aspect === "16:9") {
+      project.platform = "youtube";
+      project.formatId = "long";
+    }
     set({ project, assets: map, hydrating: false });
   },
   setToast(t) {

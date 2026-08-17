@@ -1,4 +1,4 @@
-export type Aspect = "9:16" | "1:1" | "16:9";
+export type Aspect = "9:16" | "1:1" | "16:9" | "4:5";
 export type TrackKind = "video" | "overlay" | "audio" | "captions";
 export type ClipType = "video" | "image" | "audio" | "text" | "caption" | "shape";
 export type TextPreset =
@@ -12,7 +12,18 @@ export type TextPreset =
   | "hold"
   | "slide-up"
   | "pop"
-  | "type-on";
+  | "type-on"
+  | "scramble"
+  | "morph"
+  | "weight"
+  | "typewriter"
+  | "pixel"
+  | "mask"
+  | "brush"
+  | "fadeup"
+  | "dust"
+  | "spark"
+  | "vapor";
 export type OutPreset = "fade" | "sink" | "scale" | "hold";
 export type TransitionKind = "cut" | "fade" | "dissolve" | "slide" | "wipe";
 export type CaptionStyle = "plate" | "stroke" | "karaoke" | "stack";
@@ -25,6 +36,7 @@ export const ASPECT_SIZE: Record<Aspect, { w: number; h: number }> = {
   "9:16": { w: 1080, h: 1920 },
   "1:1": { w: 1080, h: 1080 },
   "16:9": { w: 1920, h: 1080 },
+  "4:5": { w: 1080, h: 1350 },
 };
 
 export const FPS = 30;
@@ -116,6 +128,8 @@ export interface Project {
   tracks: Track[];
   clips: Clip[];
   magnetic?: boolean;
+  platform?: "tiktok" | "youtube" | "instagram" | "facebook" | "linkedin";
+  formatId?: string;
 }
 
 export function clipSpeed(c: { speed?: number }): number {
@@ -167,6 +181,8 @@ export function emptyProject(): Project {
     tracks: defaultTracks(),
     clips: [],
     magnetic: true,
+    platform: "tiktok",
+    formatId: "vertical",
   };
 }
 
@@ -211,6 +227,7 @@ export function normalizeIn(p?: TextPreset): TextPreset {
   if (p === "slide-up") return "rise";
   if (p === "pop") return "bloom";
   if (p === "type-on") return "type";
+  if (p === "fadeup") return "fadeup";
   return p || "rise";
 }
 

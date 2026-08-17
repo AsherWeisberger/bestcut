@@ -37,7 +37,7 @@ export function EmptyState() {
             Cut it <em>here.</em>
           </h1>
           <p className="lead">
-            A local editor for 9:16. Split the miss, title it, caption it, export. Bytes stay in this browser.
+            A local editor for TikTok, YouTube, Instagram, Facebook, and LinkedIn. Split the miss, title it, caption it, export. Bytes stay in this browser.
           </p>
           <div
             className={`drop ${hot ? "hot" : ""}`}
